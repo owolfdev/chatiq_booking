@@ -18,17 +18,21 @@ npm run dev   # http://localhost:3003
 - Mission: [`dev_docs/_mission-booking-sibling-v1.md`](./dev_docs/_mission-booking-sibling-v1.md)
 - API contract: [`dev_docs/api-contract-v0.md`](./dev_docs/api-contract-v0.md)
 
-## ChatIQ adapter
+## ChatIQ adapter (chat path wired)
 
-In `chatiq`, set:
+In `chatiq` `.env.local`:
 
 ```bash
+BOOKING_RUNTIME=sibling
 BOOKING_SIBLING_URL=http://localhost:3003
 BOOKING_SIBLING_TOKEN=<same as BOOKING_SERVICE_TOKEN>
-BOOKING_RUNTIME=sibling
+# Strongly recommended: only the pilot bot UUID
+BOOKING_SIBLING_BOT_IDS=<pilot-bot-uuid>
 ```
 
-`booking_mode` must be `full` on the bot. If the sibling is down or misconfigured, ChatIQ fails closed (no booking network call / falls back to core chat).
+Pilot bot: set **Booking** to `full` in bot settings. Restart `chatiq` after env changes.
+
+Any non-welcome message to that bot calls the sibling; legacy booking engine is skipped for that bot. If the sibling errors/times out, ChatIQ fails closed to core chat (no legacy fallback).
 
 ## Persistence
 

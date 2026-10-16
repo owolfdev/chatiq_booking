@@ -39,11 +39,11 @@ In-process booking in `chatiq` coupled core chat to a large engine. Extract to a
 
 ### WS-B — Vertical slice (next)
 
+- [x] Wire adapter into chat turn path for opted-in pilot bot (`BOOKING_SIBLING_BOT_IDS`)
 - [ ] Provision booking Supabase
 - [ ] `contacts` + `identity_bindings` + sessions/bookings tables
 - [ ] One catalog item + availability + create booking
 - [ ] Minimal admin schedule view
-- [ ] Wire adapter into chat turn path for opted-in pilot bot only
 
 ### WS-C — Identity (phased)
 
@@ -79,3 +79,26 @@ chatiq:         [##__________________] ~10% -> adapter only (legacy engine still
 1. Smoke the stub locally (`npm run dev` on 3003; curl health + turn).
 2. Optional: wire adapter call site behind `BOOKING_RUNTIME=sibling` for one test bot.
 3. When ready for persistence: new Supabase + first vertical slice.
+
+### 2026-10-17 — Chat path wire-up
+
+**Changed**
+- `handle-chat-requests` calls sibling when `BOOKING_RUNTIME=sibling` + URL/token + `booking_mode=full` + optional bot allowlist; legacy engine skipped for that bot.
+- Mock sessions reused per conversation; fail closed → core chat.
+
+**Verified**
+- Adapter/allowlist unit tests (`vitest` booking-sibling-adapter: 9 passed).
+- Local API smoke on `:3003`: `GET /api/health` ok; two `POST /api/v1/turns/handle` turns reused `ses_mock_1` for same `conversation_id`.
+- `chatiq-booking` `npm run typecheck` + `npm run build` ok.
+
+**Approx. toward DoD:** **~35%**.
+
+```text
+chatiq-booking: [#######_____________] ~35% -> DoD
+chatiq:         [######______________] ~30% -> sibling chat wire (pilot env)
+```
+
+**Next**
+1. Optional UI pilot: set `BOOKING_RUNTIME=sibling` + `BOOKING_SIBLING_*` in `chatiq` `.env.local`, one bot `booking_mode=full` + allowlist UUID; confirm stub reply in web chat.
+2. Provision booking Supabase + first vertical slice (catalog item, availability, create booking).
+3. Minimal admin schedule view.

@@ -26,6 +26,7 @@ export type MockSession = {
 const contacts = new Map<string, MockContact>();
 const sessions = new Map<string, MockSession>();
 const bindingIndex = new Map<string, string>(); // `${team}|${provider}|${external_id}` -> contact_id
+const sessionByConversation = new Map<string, string>(); // `${team}|${conversation_id}` -> session_id
 
 function bindingKey(teamId: string, provider: string, externalId: string) {
   return `${teamId}|${provider}|${externalId}`;
@@ -83,6 +84,21 @@ export function getOrCreateMockSession(input: {
     }
   }
 
+  const conversationKey =
+    input.conversation_id?.trim()
+      ? `${input.team_id}|${input.conversation_id.trim()}`
+      : null;
+  if (conversationKey) {
+    const existingId = sessionByConversation.get(conversationKey);
+    if (existingId) {
+      const existing = sessions.get(existingId);
+      if (existing) {
+        existing.updated_at = new Date().toISOString();
+        return existing;
+      }
+    }
+  }
+
   const id = input.session_id?.trim() || `ses_mock_${sessions.size + 1}`;
   const now = new Date().toISOString();
   const session: MockSession = {
@@ -97,6 +113,9 @@ export function getOrCreateMockSession(input: {
     updated_at: now,
   };
   sessions.set(id, session);
+  if (conversationKey) {
+    sessionByConversation.set(conversationKey, id);
+  }
   return session;
 }
 
