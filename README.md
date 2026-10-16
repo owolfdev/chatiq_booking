@@ -18,14 +18,22 @@ npm run dev   # http://localhost:3003
 - Mission: [`dev_docs/_mission-booking-sibling-v1.md`](./dev_docs/_mission-booking-sibling-v1.md)
 - API contract: [`dev_docs/api-contract-v0.md`](./dev_docs/api-contract-v0.md)
 
+## Deploy
+
+- Production: https://chatiq-booking.vercel.app/
+- Health: https://chatiq-booking.vercel.app/api/health
+
 ## ChatIQ adapter (chat path wired)
 
-In `chatiq` `.env.local`:
+**Next production-pilot step:** point ChatIQ at the deployed sibling with one allowlisted bot. Full checklist: [`dev_docs/_mission-booking-sibling-v1.md`](./dev_docs/_mission-booking-sibling-v1.md) (**Resume here**).
+
+In `chatiq` `.env.local` (or Vercel):
 
 ```bash
 BOOKING_RUNTIME=sibling
-BOOKING_SIBLING_URL=http://localhost:3003
-BOOKING_SIBLING_TOKEN=<same as BOOKING_SERVICE_TOKEN>
+BOOKING_SIBLING_URL=https://chatiq-booking.vercel.app
+# Local sibling instead: BOOKING_SIBLING_URL=http://localhost:3003
+BOOKING_SIBLING_TOKEN=<same as BOOKING_SERVICE_TOKEN on this app>
 # Strongly recommended: only the pilot bot UUID
 BOOKING_SIBLING_BOT_IDS=<pilot-bot-uuid>
 ```
@@ -36,4 +44,4 @@ Any non-welcome message to that bot calls the sibling; legacy booking engine is 
 
 ## Persistence
 
-Skeleton uses **in-memory mock** only. A dedicated Supabase project comes with the first real vertical slice.
+Runtime is still **in-memory mock** until the Supabase client is wired. Dedicated project is provisioned (env keys only — see mission); schema + client are the next engineering slice after the ChatIQ pilot smoke.
