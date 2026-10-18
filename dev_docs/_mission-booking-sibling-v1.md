@@ -1,29 +1,22 @@
 # Mission: Booking sibling v1 (`chatiq-booking`)
 
 Last updated: 2026-10-18  
-Status: **In progress** — deployed to Vercel (mock persistence); ChatIQ prod/local not yet pointed at sibling for a pilot bot.  
+Status: **In progress** — pilot stub smoke **passed** (local ChatIQ → Vercel sibling); next is Supabase wire-up + real `booking.create` slice.  
 Owner: Engineering
 
-## Resume here (next session — production pilot path)
+## Resume here (next session)
 
 **Do this next, in order:**
 
-1. **Credentials on ChatIQ** — In `chatiq` `.env.local` (and Vercel when testing prod chat), set:
-   ```bash
-   BOOKING_RUNTIME=sibling
-   BOOKING_SIBLING_URL=https://chatiq-booking.vercel.app
-   BOOKING_SIBLING_TOKEN=<same value as BOOKING_SERVICE_TOKEN on chatiq-booking>
-   BOOKING_SIBLING_BOT_IDS=<pilot-bot-uuid>
-   ```
-   Restart ChatIQ after env changes. Do **not** commit secrets.
-2. **Identify or create a pilot bot** — Pilot slug: **`booking-system-test-bot`**. Set **Booking** mode to `full`. Copy Bot ID from bot settings (Bot Details) into `BOOKING_SIBLING_BOT_IDS` (allowlist keeps other bots off the sibling).
-3. **Smoke / test toward DoD** — Chat the pilot bot (web or channel); expect the stub booking reply from the sibling. Confirm fail-closed if sibling is down. Then continue DoD: wire Supabase (project already provisioned), schema, first bookable happy-path, minimal admin.
-4. **After pilot works** — Vertical slice on real DB; later clear/widen allowlist for release; archive legacy engine when ready.
+1. **Wire Supabase in `chatiq-booking`** — client + migrations (`contacts`, `identity_bindings`, sessions/bookings); flip off mock when ready. Project ref `crxwmkegmrusndpocntu` (keys already in booking env).
+2. **Vertical slice** — one catalog item + availability + create booking (`booking.create`); minimal admin schedule view.
+3. **WS-E** — intent → typed command library (see [`booking-command-library.md`](./booking-command-library.md)); demote keyword canned as primary entry.
+4. Later — widen allowlist; archive legacy engine; lookup/reschedule/cancel.
 
 **Already done (do not redo):**
-- Sibling app live: https://chatiq-booking.vercel.app/ — `GET /api/health` returns `ok` (`persistence: mock`).
-- Supabase project provisioned (ref `crxwmkegmrusndpocntu`); keys belong in `chatiq-booking` `.env.local` / Vercel (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`). **Not wired in code yet** — still mock.
-- Chat path adapter in `chatiq` (`booking-sibling/`) committed + pushed; gated off unless env + `booking_mode=full` + allowlist.
+- Sibling live: https://chatiq-booking.vercel.app/ — health ok; still `persistence: mock` until wired.
+- Chat path adapter + allowlist; ChatIQ env pointed at sibling for pilot.
+- **Pilot stub smoke (2026-10-18):** bot `booking-system-test-bot` (`ed98722d-bbad-485d-a187-c54b4429d544`), `booking_mode=full`. User: “can I book an appointment?” → `[booking stub] Got it (Asia/Bangkok). Session ses_mock_…` · `response_source: deterministic`.
 
 ## Decisions (locked)
 
@@ -65,7 +58,7 @@ In-process booking in `chatiq` coupled core chat to a large engine. Extract to a
 ### WS-B — Vertical slice (next)
 
 - [x] Wire adapter into chat turn path for opted-in pilot bot (`BOOKING_SIBLING_BOT_IDS`)
-- [ ] **Pilot env on ChatIQ** — sibling URL/token + allowlisted bot + `booking_mode=full`; confirm stub in chat
+- [x] **Pilot env on ChatIQ** — sibling URL/token + allowlisted bot + `booking_mode=full`; stub confirmed in chat (2026-10-18)
 - [x] Provision booking Supabase project (ref `crxwmkegmrusndpocntu`; keys in env only)
 - [ ] Wire Supabase client in `chatiq-booking` (leave mock until this lands)
 - [ ] `contacts` + `identity_bindings` + sessions/bookings tables
@@ -180,3 +173,21 @@ chatiq:         [######______________] ~30% -> needs pilot env + bot smoke
 **Next**
 1. Unchanged pilot path (credentials → bot → stub smoke).
 2. After Supabase + `booking.create` slice: implement WS-E command selection.
+
+### 2026-10-18 — Pilot stub smoke passed
+
+**Changed / verified**
+- Local ChatIQ → `https://chatiq-booking.vercel.app` with pilot bot `booking-system-test-bot` (`ed98722d-bbad-485d-a187-c54b4429d544`).
+- Chat: “can I book an appointment?” → stub reply with mock session; marked Deterministic.
+
+**Approx. toward DoD:** **~45%**.
+
+```text
+chatiq-booking: [#########___________] ~45% -> DoD
+chatiq:         [#########___________] ~45% -> pilot sibling path live
+```
+
+**Next**
+1. Wire Supabase (schema + client); replace mock persistence.
+2. First real bookable happy-path (`booking.create`) + minimal admin.
+3. Intent → command library (WS-E).
