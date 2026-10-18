@@ -82,11 +82,10 @@ In-process booking in `chatiq` coupled core chat to a large engine. Extract to a
 
 - [x] Spec + roadmap: [`booking-command-library.md`](./booking-command-library.md)
 - [x] Extend turn API with optional `command` + `slots` + `confidence`
-- [x] Sibling: route by command (`create` / `lookup` / `clarify`; stub later cmds)
+- [x] Sibling: route by command (`create` / `lookup` / `clarify` / `cancel` / `reschedule` / `faq`)
 - [x] ChatIQ: heuristic select command before calling sibling
-- [ ] Map optional canned/buttons to same command IDs
-- [x] `booking.lookup` + `booking.clarify` (pilot)
-- [ ] `booking.cancel` / `reschedule` / `faq` (real handlers)
+- [x] Map canned `booking_start` / `booking_command` → sibling command IDs
+- [x] `booking.lookup` + `booking.clarify` + cancel confirm + reschedule
 
 ## 4) Progress Log
 
@@ -123,7 +122,19 @@ chatiq:         [###########_________] ~55% -> command select on pilot path
 
 **Verified (chat):** lookup / create-with-existing / clarify all deterministic in pilot bot (2026-10-19).
 
-**Next:** canned→command map; real cancel/reschedule handlers; later widen allowlist / archive legacy.
+### 2026-10-19 — Canned map + cancel / reschedule
+
+**Changed**
+- ChatIQ: canned `booking_start` / `action_config.booking_command` → sibling command shortcut.
+- Sibling: `booking.cancel` (yes/no confirm) + `booking.reschedule` (cancel then new slots) + faq stub.
+
+**Approx. toward DoD:** **~85%**.
+
+```text
+chatiq-booking: [#################___] ~85% -> DoD
+```
+
+**Next:** chat-smoke cancel/reschedule; later widen allowlist / archive legacy / LLM tool select.
 
 ### Earlier (2026-10-17 → 2026-10-19)
 

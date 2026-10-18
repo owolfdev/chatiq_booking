@@ -341,6 +341,31 @@ export class SlotConflictError extends Error {
   }
 }
 
+export async function cancelBooking(input: {
+  booking_id: string;
+  notes?: string;
+}): Promise<DbBooking | null> {
+  const supabase = createBookingAdminClient();
+  if (!supabase) throw new Error("Supabase not configured");
+
+  const { data, error } = await supabase
+    .from("bookings")
+    .update({
+      status: "cancelled",
+      notes: input.notes ?? "cancelled by customer",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", input.booking_id)
+    .in("status", ["pending", "confirmed"])
+    .select("id, status, starts_at, timezone, catalog_item_id")
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`bookings cancel failed: ${error.message}`);
+  }
+  return (data as DbBooking | null) ?? null;
+}
+
 export async function createBooking(input: {
   team_id: string;
   bot_id: string;

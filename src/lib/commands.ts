@@ -50,6 +50,14 @@ export function resolveBookingCommand(params: {
   const step = params.sessionStep ?? "";
   const text = params.messageText?.trim() ?? "";
 
+  if (step.startsWith("confirm_cancel:")) {
+    return {
+      command: "booking.cancel",
+      confidence: 1,
+      source: "session_continue",
+    };
+  }
+
   if (step.startsWith("awaiting_slot:") || SLOT_PICK_RE.test(text)) {
     return {
       command: "booking.create",
@@ -79,22 +87,7 @@ export function resolveBookingCommand(params: {
   const reschedule = RESCHEDULE_RE.test(text);
   const faq = FAQ_RE.test(text);
 
-  const hits = [
-    lookup && "lookup",
-    create && "create",
-    cancel && "cancel",
-    reschedule && "reschedule",
-    faq && "faq",
-  ].filter(Boolean);
-
-  if (hits.length > 1) {
-    // "check if I already have a booking" is lookup-dominant
-    if (lookup && !/\b(want to|like to|make a)\b/i.test(text)) {
-      return { command: "booking.lookup", confidence: 0.75, source: "heuristic" };
-    }
-    return { command: "booking.clarify", confidence: 0.55, source: "heuristic" };
-  }
-
+  // Prefer explicit mutators over overlapping create/lookup tokens.
   if (cancel) {
     return { command: "booking.cancel", confidence: 0.7, source: "heuristic" };
   }
@@ -107,6 +100,14 @@ export function resolveBookingCommand(params: {
   }
   if (faq) {
     return { command: "booking.faq", confidence: 0.65, source: "heuristic" };
+  }
+
+  if (lookup && create) {
+    // "check if I already have a booking" is lookup-dominant
+    if (!/\b(want to|like to|make a)\b/i.test(text)) {
+      return { command: "booking.lookup", confidence: 0.75, source: "heuristic" };
+    }
+    return { command: "booking.clarify", confidence: 0.55, source: "heuristic" };
   }
   if (lookup) {
     return { command: "booking.lookup", confidence: 0.8, source: "heuristic" };

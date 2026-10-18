@@ -29,12 +29,12 @@ Keyword / canned triggers on words like “booking” or “appointment” are *
 
 | Command | Speech act | Mutating? | Pilot status |
 |---------|------------|-----------|--------------|
-| `booking.create` | Start / continue new booking | Yes (on commit) | **Implemented** (slots + DB) |
-| `booking.lookup` | Check existing booking / time | No | Implementing |
-| `booking.clarify` | Ambiguous intent | No | Implementing |
-| `booking.cancel` | Cancel | Yes | Later |
-| `booking.reschedule` | Change slot | Yes | Later |
-| `booking.faq` | Policy / how-to | No | Later (or core RAG) |
+| `booking.create` | Start / continue new booking | Yes (on commit) | **Done** |
+| `booking.lookup` | Check existing booking / time | No | **Done** |
+| `booking.clarify` | Ambiguous intent | No | **Done** |
+| `booking.cancel` | Cancel (yes/no confirm) | Yes | **Done** |
+| `booking.reschedule` | Cancel current + offer new slots | Yes | **Done** |
+| `booking.faq` | Policy / how-to | No | Pilot stub copy |
 
 **Rules**
 - Unknown / low confidence → `booking.clarify` or stay in core chat (ChatIQ gate).
@@ -63,10 +63,14 @@ Optional on `POST /api/v1/turns/handle` (contract still `"0"`):
 
 See [`api-contract-v0.md`](./api-contract-v0.md).
 
+## Canned shortcuts (ChatIQ)
+
+- `action: booking_start` → `booking.create`
+- `action_config.booking_command` → any catalog id (overrides)
+
 ## Roadmap
 
-1. ~~Pilot create + admin~~ **done**
-2. **Now** — `command` on contract; sibling router; ChatIQ heuristic selector; `lookup` + `clarify`
-3. Later — cancel / reschedule / faq; LLM tool selection; widen allowlist
+1. ~~Pilot create + admin + WS-E v0~~ **done**
+2. Later — LLM tool selection; widen allowlist; archive legacy
 
 Mission: [`_mission-booking-sibling-v1.md`](./_mission-booking-sibling-v1.md) WS-E.
