@@ -224,3 +224,106 @@ export async function ensurePilotCatalogItem(input: {
   }
   return created;
 }
+
+export async function updateSessionStep(
+  sessionId: string,
+  step: string
+): Promise<void> {
+  const supabase = createBookingAdminClient();
+  if (!supabase) throw new Error("Supabase not configured");
+  const { error } = await supabase
+    .from("booking_sessions")
+    .update({ step, updated_at: new Date().toISOString() })
+    .eq("id", sessionId);
+  if (error) {
+    throw new Error(`booking_sessions step update failed: ${error.message}`);
+  }
+}
+
+export async function listTakenStarts(input: {
+  team_id: string;
+  bot_id: string;
+}): Promise<Set<string>> {
+  const supabase = createBookingAdminClient();
+  if (!supabase) return new Set();
+  const { data, error } = await supabase
+    .from("bookings")
+    .select("starts_at")
+    .eq("team_id", input.team_id)
+    .eq("bot_id", input.bot_id)
+    .in("status", ["pending", "confirmed"])
+    .not("starts_at", "is", null);
+  if (error) {
+    console.warn("[booking] listTakenStarts failed", error.message);
+    return new Set();
+  }
+  return new Set(
+    (data ?? [])
+      .map((row) => row.starts_at)
+      .filter((v): v is string => typeof v === "string")
+  );
+}
+
+export type DbBooking = {
+  id: string;
+  status: string;
+  starts_at: string | null;
+  timezone: string;
+  catalog_item_id: string | null;
+};
+
+export async function getLatestOpenBooking(input: {
+  team_id: string;
+  bot_id: string;
+  contact_id: string;
+}): Promise<DbBooking | null> {
+  const supabase = createBookingAdminClient();
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from("bookings")
+    .select("id, status, starts_at, timezone, catalog_item_id")
+    .eq("team_id", input.team_id)
+    .eq("bot_id", input.bot_id)
+    .eq("contact_id", input.contact_id)
+    .in("status", ["pending", "confirmed"])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`bookings lookup failed: ${error.message}`);
+  }
+  return (data as DbBooking | null) ?? null;
+}
+
+export async function createBooking(input: {
+  team_id: string;
+  bot_id: string;
+  contact_id: string;
+  session_id: string;
+  catalog_item_id: string | null;
+  starts_at: string;
+  timezone: string;
+}): Promise<DbBooking> {
+  const supabase = createBookingAdminClient();
+  if (!supabase) throw new Error("Supabase not configured");
+
+  const { data, error } = await supabase
+    .from("bookings")
+    .insert({
+      team_id: input.team_id,
+      bot_id: input.bot_id,
+      contact_id: input.contact_id,
+      session_id: input.session_id,
+      catalog_item_id: input.catalog_item_id,
+      status: "confirmed",
+      starts_at: input.starts_at,
+      timezone: input.timezone,
+    })
+    .select("id, status, starts_at, timezone, catalog_item_id")
+    .single();
+
+  if (error || !data) {
+    throw new Error(`bookings insert failed: ${error?.message ?? "unknown"}`);
+  }
+  return data as DbBooking;
+}

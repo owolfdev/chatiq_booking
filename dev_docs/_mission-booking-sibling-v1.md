@@ -1,24 +1,22 @@
 # Mission: Booking sibling v1 (`chatiq-booking`)
 
 Last updated: 2026-10-18  
-Status: **In progress** — Supabase **client + migration authored**; apply SQL once, then finish `booking.create` slice.  
+Status: **In progress** — DB live + **`booking.create` happy path** (offer slots → pick 1/2/3 → confirmed row). Next: admin view + ChatIQ chat verify + WS-E.  
 Owner: Engineering
 
 ## Resume here (next session)
 
 **Do this next, in order:**
 
-1. **Apply schema** — run [`supabase/migrations/20261019000000_booking_core_v0.sql`](../supabase/migrations/20261019000000_booking_core_v0.sql) in Supabase SQL Editor (see [`supabase-setup.md`](./supabase-setup.md)). Confirm `/api/health` → `persistence: "supabase"`.
-2. **Set same Supabase env on Vercel** for `chatiq-booking` (if not already).
-3. **Vertical slice** — create booking happy path (`booking.create`) + availability; minimal admin schedule view.
-4. **WS-E** — intent → typed command library (see [`booking-command-library.md`](./booking-command-library.md)).
+1. **Confirm Vercel** has Supabase env + redeploy so prod health is `persistence: "supabase"`.
+2. **Chat smoke** — pilot bot `booking-system-test-bot`: “I want to book” → pick `1` → confirmed booking reply (not stub).
+3. **Minimal admin** — schedule list of bookings for a team/bot.
+4. **WS-E** — intent → typed command library ([`booking-command-library.md`](./booking-command-library.md)).
 5. Later — widen allowlist; archive legacy engine; lookup/reschedule/cancel.
 
 **Already done (do not redo):**
-- Sibling live: https://chatiq-booking.vercel.app/
-- Chat path adapter + pilot stub smoke (`booking-system-test-bot`).
-- Supabase project `crxwmkegmrusndpocntu` + env keys locally; **JS client + turn/health wired** (falls back to mock until migration applied).
-- Migration SQL + setup doc committed.
+- Sibling + ChatIQ pilot path; migration applied; Supabase client.
+- Pilot create flow: slots + `bookings` insert (`confirmed`).
 
 ## Decisions (locked)
 
@@ -64,8 +62,8 @@ In-process booking in `chatiq` coupled core chat to a large engine. Extract to a
 - [x] Provision booking Supabase project (ref `crxwmkegmrusndpocntu`; keys in env)
 - [x] Wire Supabase client in `chatiq-booking` (mock fallback until schema applied)
 - [x] Migration authored: `contacts` + `identity_bindings` + `booking_sessions` + `catalog_items` + `bookings`
-- [ ] **Apply migration** in Supabase SQL Editor / `supabase db push`
-- [ ] One catalog item + availability + create booking (seed consultation item exists in code)
+- [x] **Apply migration** in Supabase SQL Editor
+- [x] One catalog item + availability + create booking (reply `1`/`2`/`3`)
 - [ ] Minimal admin schedule view
 
 ### WS-C — Identity (phased)
@@ -230,3 +228,24 @@ chatiq:         [#########___________] ~45% -> pilot path unchanged
 1. User applies migration in SQL Editor.
 2. Confirm health `persistence: "supabase"`.
 3. Implement real `booking.create` (slots/availability) + admin.
+
+### 2026-10-19 — Migration applied + booking.create happy path
+
+**Changed**
+- Verified all five tables; health `persistence: "supabase"`.
+- Slot offer + pick (`1`/`2`/`3`) creates `bookings` row (`confirmed`); session step machine; catalog seed.
+
+**Verified**
+- API smoke: offer three slots → reply `1` → `Booked Consultation…`; `bookings` count ≥ 1; typecheck + build ok.
+
+**Approx. toward DoD:** **~65%**.
+
+```text
+chatiq-booking: [#############_______] ~65% -> DoD
+chatiq:         [#########___________] ~45% -> re-smoke pilot chat after Vercel env
+```
+
+**Next**
+1. Vercel env + redeploy; pilot chat smoke.
+2. Minimal admin schedule view.
+3. WS-E command library.
