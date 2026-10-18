@@ -121,7 +121,9 @@ chatiq-booking: [################____] ~80% -> DoD
 chatiq:         [###########_________] ~55% -> command select on pilot path
 ```
 
-**Next:** chat-smoke lookup vs create; canned→command map; real cancel/reschedule later.
+**Verified (chat):** lookup / create-with-existing / clarify all deterministic in pilot bot (2026-10-19).
+
+**Next:** canned→command map; real cancel/reschedule handlers; later widen allowlist / archive legacy.
 
 ### Earlier (2026-10-17 → 2026-10-19)
 
