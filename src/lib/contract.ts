@@ -23,6 +23,12 @@ export type BookingTurnRequest = {
   timezone?: string | null;
   identity_claims?: IdentityBindingClaim[];
   session_id?: string | null;
+  /** Closed catalog command; see commands.ts / booking-command-library.md */
+  command?: string | null;
+  /** Structured args for the command (v0 mostly unused) */
+  slots?: Record<string, unknown> | null;
+  /** 0–1 selection confidence from ChatIQ */
+  confidence?: number | null;
 };
 
 export type BookingSurfaceDecision = "in_channel" | "handoff_required";

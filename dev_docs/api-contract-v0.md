@@ -2,21 +2,22 @@
 
 Service-to-service JSON over HTTPS. Auth: `Authorization: Bearer <shared token>`.
 
-**Product direction (not fully in wire format yet):** entry should be **intent → typed booking commands**, not keyword canned as primary ownership. See [`booking-command-library.md`](./booking-command-library.md). v0 below is the stub turn handle; a later revision adds optional `command` + `slots`.
+Product direction: **intent → typed booking commands**. See [`booking-command-library.md`](./booking-command-library.md).
 
 ## `GET /api/health`
-
-No auth required (liveness).
 
 ```json
 {
   "ok": true,
   "service": "chatiq-booking",
   "contract_version": "0",
-  "persistence": "mock",
-  "timezone_default": "Asia/Bangkok"
+  "persistence": "supabase",
+  "timezone_default": "Asia/Bangkok",
+  "supabase": { "configured": true, "reachable": true }
 }
 ```
+
+`persistence`: `mock` | `supabase`.
 
 ## `POST /api/v1/turns/handle`
 
@@ -35,9 +36,22 @@ No auth required (liveness).
   "session_id": null,
   "identity_claims": [
     { "provider": "chatiq_conversation", "external_id": "…", "verified": false }
-  ]
+  ],
+  "command": "booking.create",
+  "slots": {},
+  "confidence": 0.9
 }
 ```
+
+| Field | Required | Notes |
+|-------|----------|--------|
+| `team_id`, `bot_id` | yes | |
+| `message_text` | usually | Slot picks (`1`/`2`/`3`) and free text |
+| `command` | no | Closed catalog; if omitted, sibling may classify |
+| `slots` | no | Future structured args |
+| `confidence` | no | 0–1 hint from ChatIQ |
+
+**Commands:** `booking.create` | `booking.lookup` | `booking.clarify` | `booking.cancel` | `booking.reschedule` | `booking.faq`
 
 ### Success
 
@@ -47,10 +61,10 @@ No auth required (liveness).
   "ok": true,
   "reply_text": "…",
   "surface_decision": "in_channel",
-  "session_id": "ses_mock_1",
-  "contact_id": "ctc_mock_1",
-  "ui": null,
-  "mock": true
+  "session_id": "uuid",
+  "contact_id": "uuid",
+  "ui": { "command": "booking.create", "slots": [] },
+  "mock": false
 }
 ```
 
@@ -67,18 +81,8 @@ No auth required (liveness).
 }
 ```
 
-ChatIQ adapter: timeout / non-2xx / `ok: false` → fail closed (skip sibling; core chat continues).
+ChatIQ adapter: timeout / non-2xx / `ok: false` → fail closed (core chat continues).
 
-## Forward: commands (planned)
+## Admin
 
-Optional request fields (contract bump when implemented):
-
-```json
-{
-  "command": "booking.create",
-  "slots": { "service_id": null, "preferred_date": null },
-  "confidence": 0.82
-}
-```
-
-If `command` is omitted, sibling may infer or return clarify. Closed catalog: `booking.create` | `booking.lookup` | `booking.reschedule` | `booking.cancel` | `booking.faq` | `booking.clarify`.
+`GET /api/v1/admin/bookings` — Bearer token; returns recent bookings for schedule UI (`/admin`).

@@ -1,7 +1,7 @@
 # Booking command library (intent → typed actions)
 
-Last updated: 2026-10-18  
-Status: **Spec / roadmap** — not implemented yet  
+Last updated: 2026-10-19  
+Status: **Implementing** (WS-E)  
 Owner: Engineering
 
 ## Problem
@@ -16,54 +16,57 @@ Keyword / canned triggers on words like “booking” or “appointment” are *
 | I’d like to schedule an appointment | Create |
 | I already have an appointment — can I check the time? | Lookup |
 
-Canned keyword matching cannot reliably choose among these. Relying on it as the primary entry to booking is brittle (especially multilingual).
-
 ## Decision
 
 **Prefer inferred intent + a closed library of booking commands** over keyword-first ownership.
 
-1. **Understand speech act** (create / lookup / change / cancel / FAQ / clarify).
-2. **Select a typed command** from a fixed catalog (tool-style; not freeform LLM side effects).
-3. **Execute** only through gated paths (`booking_mode`, sibling allowlist); sibling owns booking effects.
-4. Keep **keywords / LINE buttons** as optional **shortcuts that map to the same commands** — not a parallel system.
+1. Understand speech act (create / lookup / change / cancel / FAQ / clarify).
+2. Select a typed command from a fixed catalog.
+3. Execute only through gated paths; sibling owns booking effects.
+4. Keywords/buttons = shortcuts to the same command IDs.
 
-Core chat stays default; booking owns a turn only when a command is selected (or an active booking session continues).
+## v0 command catalog
 
-## v0 command catalog (draft)
-
-Stable names; schemas evolve with the API contract.
-
-| Command | Speech act | Mutating? | Notes |
-|---------|------------|-----------|--------|
-| `booking.create` | Start / continue new booking | Yes (when committed) | Pilot happy-path |
-| `booking.lookup` | Check existing booking / time | No | Needs identity binding |
-| `booking.reschedule` | Change time/slot | Yes | After lookup |
-| `booking.cancel` | Cancel | Yes | Confirm required |
-| `booking.faq` | Policy / how-to about booking | No | May stay in RAG/core; or sibling FAQ |
-| `booking.clarify` | Ambiguous intent | No | Ask: new vs existing? |
+| Command | Speech act | Mutating? | Pilot status |
+|---------|------------|-----------|--------------|
+| `booking.create` | Start / continue new booking | Yes (on commit) | **Implemented** (slots + DB) |
+| `booking.lookup` | Check existing booking / time | No | Implementing |
+| `booking.clarify` | Ambiguous intent | No | Implementing |
+| `booking.cancel` | Cancel | Yes | Later |
+| `booking.reschedule` | Change slot | Yes | Later |
+| `booking.faq` | Policy / how-to | No | Later (or core RAG) |
 
 **Rules**
-- Unknown / low confidence → **do not** invent a command; stay in core chat or emit `booking.clarify`.
-- Mutating commands require **confirm** (or explicit button) before commit when confidence is mid.
-- Commands have **slot schemas**; missing slots → one clarifying question, no guessing.
-- Explicit UI (buttons, exact canned with `booking_start`-style actions) maps to the same command IDs.
+- Unknown / low confidence → `booking.clarify` or stay in core chat (ChatIQ gate).
+- Active session in `awaiting_slot` / mid-create → continue `booking.create` (slot pick).
+- Mutating commands: confirm when mid-confidence (later).
 
-## Where it lives
+## Ownership
 
 | Concern | Owner |
 |---------|--------|
-| Intent → command selection | ChatIQ (thin router / tool-call), or sibling if turn API accepts `message_text` only and resolves internally — **prefer ChatIQ selects, sibling executes** for isolation |
-| Command execution + session state | `chatiq-booking` |
-| Keyword canned | Optional shortcuts → same command IDs |
-| Gates | `booking_mode`, `BOOKING_RUNTIME=sibling`, `BOOKING_SIBLING_BOT_IDS` |
+| Intent → command selection | Prefer **ChatIQ** (heuristic v0; LLM tool-call later) |
+| Command execution + session | **`chatiq-booking`** |
+| If `command` omitted on turn | Sibling runs same heuristic classifier (safe for API smoke) |
 
-Contract evolution: extend `POST /api/v1/turns/handle` (or a dedicated `POST /api/v1/commands/execute`) with optional `command` + `slots` once pilot stub smoke is done. Until then, stub may treat all messages as soft create/clarify. See [`api-contract-v0.md`](./api-contract-v0.md).
+## Wire format
 
-## Roadmap placement
+Optional on `POST /api/v1/turns/handle` (contract still `"0"`):
 
-1. **Now** — Pilot env + stub smoke (no command library required).
-2. **Next (DoD vertical slice)** — Wire Supabase; implement `booking.create` end-to-end.
-3. **Then** — Add lookup / clarify; wire ChatIQ intent→command selection; demote keyword canned to shortcuts.
-4. **Later** — reschedule / cancel; widen allowlist for release.
+```json
+{
+  "command": "booking.create",
+  "slots": {},
+  "confidence": 0.9
+}
+```
 
-Tracked on mission [`_mission-booking-sibling-v1.md`](./_mission-booking-sibling-v1.md) (WS-E) and workspace [`ROADMAP.md`](../../ROADMAP.md).
+See [`api-contract-v0.md`](./api-contract-v0.md).
+
+## Roadmap
+
+1. ~~Pilot create + admin~~ **done**
+2. **Now** — `command` on contract; sibling router; ChatIQ heuristic selector; `lookup` + `clarify`
+3. Later — cancel / reschedule / faq; LLM tool selection; widen allowlist
+
+Mission: [`_mission-booking-sibling-v1.md`](./_mission-booking-sibling-v1.md) WS-E.

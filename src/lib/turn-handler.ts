@@ -5,6 +5,7 @@ import {
   generateOfferSlots,
   matchSlotChoice,
 } from "@/lib/availability";
+import { resolveBookingCommand } from "@/lib/commands";
 import {
   BOOKING_API_CONTRACT_VERSION,
   type BookingTurnRequest,
@@ -44,9 +45,20 @@ function okReply(params: {
   };
 }
 
+function formatWhen(iso: string, timeZone: string) {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(iso));
+}
+
 /**
- * Prefer Supabase when configured and schema is present; otherwise mock.
- * Pilot flow: offer slots → user picks 1/2/3 → create confirmed booking.
+ * Prefer Supabase when configured; route by booking command catalog.
  */
 export async function handleTurn(
   body: BookingTurnRequest
@@ -95,30 +107,79 @@ export async function handleTurn(
 
     const text = body.message_text?.trim() || "";
     const serviceName = catalog?.title ?? "Consultation";
+    const selection = resolveBookingCommand({
+      messageText: text,
+      clientCommand: body.command,
+      clientConfidence: body.confidence,
+      sessionStep: session.step,
+    });
 
-    const wantsNew = /\bnew\b/i.test(text);
     const existing = await getLatestOpenBooking({
       team_id: body.team_id,
       bot_id: body.bot_id,
       contact_id: contact.id,
     });
 
-    if ((session.step === "booked" || existing) && !wantsNew) {
+    if (selection.command === "booking.lookup") {
       if (existing?.starts_at) {
-        const when = new Intl.DateTimeFormat("en-GB", {
-          timeZone: existing.timezone || timezone,
-          weekday: "short",
-          day: "numeric",
-          month: "short",
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: false,
-        }).format(new Date(existing.starts_at));
         return okReply({
-          reply_text: `You already have a ${serviceName} booked for ${when}. Reply "new" if you want another appointment.`,
+          reply_text: `You have a ${serviceName} on ${formatWhen(existing.starts_at, existing.timezone || timezone)} (status: ${existing.status}).`,
           session_id: session.id,
           contact_id: contact.id,
-          ui: { booking_id: existing.id, status: existing.status },
+          ui: {
+            command: "booking.lookup",
+            booking_id: existing.id,
+            status: existing.status,
+            starts_at: existing.starts_at,
+            selection,
+          },
+        });
+      }
+      return okReply({
+        reply_text: `I don’t see an upcoming ${serviceName} for you. Say “book” if you’d like to schedule one.`,
+        session_id: session.id,
+        contact_id: contact.id,
+        ui: { command: "booking.lookup", selection },
+      });
+    }
+
+    if (selection.command === "booking.clarify") {
+      return okReply({
+        reply_text:
+          "Did you want to book a new appointment, or check an existing one?",
+        session_id: session.id,
+        contact_id: contact.id,
+        ui: { command: "booking.clarify", selection },
+      });
+    }
+
+    if (
+      selection.command === "booking.cancel" ||
+      selection.command === "booking.reschedule" ||
+      selection.command === "booking.faq"
+    ) {
+      return okReply({
+        reply_text: `That action (${selection.command}) isn’t available in the pilot yet. You can book a new ${serviceName}, or ask to check an existing booking.`,
+        session_id: session.id,
+        contact_id: contact.id,
+        ui: { command: selection.command, selection },
+      });
+    }
+
+    // booking.create
+    const wantsNew = /\bnew\b/i.test(text);
+    if ((session.step === "booked" || existing) && !wantsNew) {
+      if (existing?.starts_at) {
+        return okReply({
+          reply_text: `You already have a ${serviceName} booked for ${formatWhen(existing.starts_at, existing.timezone || timezone)}. Reply "new" if you want another appointment, or ask to check your booking.`,
+          session_id: session.id,
+          contact_id: contact.id,
+          ui: {
+            command: "booking.create",
+            booking_id: existing.id,
+            status: existing.status,
+            selection,
+          },
         });
       }
     }
@@ -152,6 +213,7 @@ export async function handleTurn(
               booking_id: booking.id,
               starts_at: booking.starts_at,
               status: booking.status,
+              selection,
             },
           });
         } catch (err) {
@@ -169,7 +231,7 @@ export async function handleTurn(
             reply_text: `Sorry — that time was just taken. Pick another:\n${formatSlotList(slots)}`,
             session_id: session.id,
             contact_id: contact.id,
-            ui: { command: "booking.create", slots },
+            ui: { command: "booking.create", slots, selection },
           });
         }
       }
@@ -178,7 +240,7 @@ export async function handleTurn(
         reply_text: `Please pick a slot by number:\n${formatSlotList(offered)}`,
         session_id: session.id,
         contact_id: contact.id,
-        ui: { command: "booking.create", slots: offered },
+        ui: { command: "booking.create", slots: offered, selection },
       });
     }
 
@@ -192,6 +254,7 @@ export async function handleTurn(
         reply_text: `Sorry — no open ${serviceName} slots in the next few days. Try again later.`,
         session_id: session.id,
         contact_id: contact.id,
+        ui: { command: "booking.create", selection },
       });
     }
 
@@ -205,7 +268,7 @@ export async function handleTurn(
       reply_text: `${intro} Pick a time (reply with 1, 2, or 3):\n${formatSlotList(slots)}`,
       session_id: session.id,
       contact_id: contact.id,
-      ui: { command: "booking.create", slots },
+      ui: { command: "booking.create", slots, selection },
     });
   } catch (err) {
     console.error("[booking] supabase turn failed, falling back to mock", err);
