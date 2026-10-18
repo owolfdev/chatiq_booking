@@ -17,6 +17,7 @@ npm run dev   # http://localhost:3003
 
 - Mission: [`dev_docs/_mission-booking-sibling-v1.md`](./dev_docs/_mission-booking-sibling-v1.md)
 - API contract: [`dev_docs/api-contract-v0.md`](./dev_docs/api-contract-v0.md)
+- Intent → commands: [`dev_docs/booking-command-library.md`](./dev_docs/booking-command-library.md)
 
 ## Deploy
 

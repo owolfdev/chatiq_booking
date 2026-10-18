@@ -1,6 +1,6 @@
 # Mission: Booking sibling v1 (`chatiq-booking`)
 
-Last updated: 2026-10-17  
+Last updated: 2026-10-18  
 Status: **In progress** — deployed to Vercel (mock persistence); ChatIQ prod/local not yet pointed at sibling for a pilot bot.  
 Owner: Engineering
 
@@ -37,6 +37,7 @@ Owner: Engineering
 | **Contacts** | Booking-owned `contacts` + `identity_bindings`; connect-link for chat↔web login (later) |
 | **Legacy** | Archive/tag old in-`chatiq` engine; mine docs, do not import runtime |
 | **Rollout** | `BOOKING_SIBLING_BOT_IDS` allowlist for pilot; widen/clear when releasing sibling to more bots |
+| **Entry UX** | **Intent → typed command library** (not keyword canned as primary). Keywords/buttons = shortcuts to the same commands. Spec: [`booking-command-library.md`](./booking-command-library.md) |
 
 ## 1) Why
 
@@ -81,6 +82,15 @@ In-process booking in `chatiq` coupled core chat to a large engine. Extract to a
 
 - [ ] Inventory + git tag `pre-booking-sibling-archive`
 - [ ] Remove old engine from hot paths; keep docs as legacy reference
+
+### WS-E — Intent → command library (spec locked; implement after pilot smoke)
+
+- [x] Spec + roadmap: [`booking-command-library.md`](./booking-command-library.md)
+- [ ] Extend turn/command API with `command` + `slots` (contract bump)
+- [ ] Implement `booking.create` (+ `booking.clarify`) on sibling
+- [ ] ChatIQ: select command from catalog on inferred speech act; fail closed / clarify when ambiguous
+- [ ] Map optional canned/buttons to same command IDs (demote keyword-as-owner)
+- [ ] Then `booking.lookup` / reschedule / cancel
 
 ## 4) Progress Log
 
@@ -150,3 +160,23 @@ chatiq:         [######______________] ~30% -> needs pilot env + bot smoke
 1. Add sibling credentials to ChatIQ (`BOOKING_RUNTIME` / `BOOKING_SIBLING_*`).
 2. Identify/create pilot bot (`booking_mode=full` + UUID in allowlist).
 3. Test stub path; then wire Supabase and continue DoD.
+
+### 2026-10-18 — Intent → command library (spec)
+
+**Changed**
+- Locked product decision: booking entry via **inferred speech act + typed command catalog**, not keyword canned as primary ownership.
+- Added [`booking-command-library.md`](./booking-command-library.md); noted planned `command`/`slots` on API contract; WS-E on this mission; roadmap row.
+
+**Verified**
+- Docs only.
+
+**Approx. toward DoD:** **~40%** (unchanged on runtime; product direction clearer for post-pilot).
+
+```text
+chatiq-booking: [########____________] ~40% -> DoD
+chatiq:         [######______________] ~30% -> needs pilot env + bot smoke
+```
+
+**Next**
+1. Unchanged pilot path (credentials → bot → stub smoke).
+2. After Supabase + `booking.create` slice: implement WS-E command selection.

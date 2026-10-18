@@ -2,6 +2,8 @@
 
 Service-to-service JSON over HTTPS. Auth: `Authorization: Bearer <shared token>`.
 
+**Product direction (not fully in wire format yet):** entry should be **intent → typed booking commands**, not keyword canned as primary ownership. See [`booking-command-library.md`](./booking-command-library.md). v0 below is the stub turn handle; a later revision adds optional `command` + `slots`.
+
 ## `GET /api/health`
 
 No auth required (liveness).
@@ -66,3 +68,17 @@ No auth required (liveness).
 ```
 
 ChatIQ adapter: timeout / non-2xx / `ok: false` → fail closed (skip sibling; core chat continues).
+
+## Forward: commands (planned)
+
+Optional request fields (contract bump when implemented):
+
+```json
+{
+  "command": "booking.create",
+  "slots": { "service_id": null, "preferred_date": null },
+  "confidence": 0.82
+}
+```
+
+If `command` is omitted, sibling may infer or return clarify. Closed catalog: `booking.create` | `booking.lookup` | `booking.reschedule` | `booking.cancel` | `booking.faq` | `booking.clarify`.
