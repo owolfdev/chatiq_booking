@@ -1,25 +1,30 @@
 # Mission: Booking sibling v1 (`chatiq-booking`)
 
-Last updated: 2026-10-19  
-Status: **In progress** — pilot create + admin **verified in ChatIQ chat**; next **WS-E command library**.  
+Last updated: 2026-10-19 (EOD handoff)  
+Status: **In progress** — WS-E command library **shipped**; next **chat-smoke cancel/reschedule**, then widen allowlist / archive legacy.  
 Owner: Engineering
 
 ## Resume here (next session)
 
 **Do this next, in order:**
 
-1. **WS-E — Intent → command library** (in progress) — see [`booking-command-library.md`](./booking-command-library.md).
-   - Contract: optional `command` + `slots` on turn handle.
-   - Sibling executes closed catalog; ChatIQ may pre-select command.
-   - Ship: `booking.create` (done) · `booking.lookup` · `booking.clarify` first; then cancel/reschedule/faq.
-2. Later — widen `BOOKING_SIBLING_BOT_IDS`; archive legacy in-`chatiq` engine; payments / connect-link.
+1. **Chat-smoke cancel + reschedule** (first action tomorrow)
+   - Pilot bot: `booking-system-test-bot` (`ed98722d-bbad-485d-a187-c54b4429d544`)
+   - Ensure ChatIQ has `BOOKING_RUNTIME=sibling` + URL/token + allowlist; sibling Vercel redeployed from latest `main`.
+   - Script: book a slot → `Please cancel my booking` → `yes` → confirm gone in `/admin`.
+   - Then book again → `reschedule my appointment` → pick new slot → `/admin` shows updated time.
+2. **Widen allowlist** — add more bot IDs to `BOOKING_SIBLING_BOT_IDS` (or clear gate when ready for broader pilot).
+3. **WS-D — Archive legacy** — tag `pre-booking-sibling-archive`; remove old in-`chatiq` engine from hot paths.
+4. Later — LLM tool-select for commands; payments; connect-link identity (WS-C).
 
 **Already done (do not redo):**
 - Deploy: https://chatiq-booking.vercel.app/ — health `persistence: "supabase"`.
 - Supabase project `crxwmkegmrusndpocntu`; migrations applied (core + slot unique).
 - ChatIQ pilot: bot `booking-system-test-bot` (`ed98722d-bbad-485d-a187-c54b4429d544`), `BOOKING_RUNTIME=sibling`, allowlist, `booking_mode=full`.
-- Chat smoke: “I want to book” → slot list → pick → confirmed; `/admin` shows schedule.
+- Chat smoke: create → slots → confirm → `/admin`; lookup / create-guard / clarify verified.
 - Slot conflict: unique index + re-offer on clash; smoke `team-pilot` duplicate cancelled.
+- WS-E: command catalog + ChatIQ heuristics + canned→command map + cancel confirm + reschedule.
+- Latest pushed: `chatiq` `1bfd5390`, `chatiq-booking` `23266a8` (plus this handoff commit).
 
 ## Decisions (locked)
 
@@ -135,6 +140,23 @@ chatiq-booking: [#################___] ~85% -> DoD
 ```
 
 **Next:** chat-smoke cancel/reschedule; later widen allowlist / archive legacy / LLM tool select.
+
+### 2026-10-19 — EOD handoff (stop for tomorrow)
+
+**Changed / state**
+- Code for WS-E (incl. cancel/reschedule + canned map) already on `main` for both repos; working trees clean before this doc commit.
+- No further product code this evening — handoff docs only.
+
+**Verified earlier today:** create / lookup / clarify / admin. **Not yet chat-smoked:** cancel confirm + reschedule (unit tests covered; live chat pending).
+
+**Approx. toward DoD:** **~85%** (unchanged).
+
+```text
+chatiq-booking: [#################___] ~85% -> DoD
+chatiq:         [############________] ~60% -> sibling path + heuristics + canned map live
+```
+
+**Tomorrow first action:** live chat-smoke cancel → yes; then reschedule → new slot; confirm `/admin`. See **Resume here**.
 
 ### Earlier (2026-10-17 → 2026-10-19)
 
