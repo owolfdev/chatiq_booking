@@ -191,3 +191,15 @@ chatiq:         [#########___________] ~45% -> pilot sibling path live
 1. Wire Supabase (schema + client); replace mock persistence.
 2. First real bookable happy-path (`booking.create`) + minimal admin.
 3. Intent → command library (WS-E).
+
+### 2026-10-18 — End of day handoff
+
+**Stopped after** successful pilot stub chat. No further coding today.
+
+**Pick up tomorrow**
+1. Open this file → **Resume here**.
+2. Confirm booking `.env.local` / Vercel still have Supabase keys for `crxwmkegmrusndpocntu`.
+3. Add Supabase client + migrations; keep mock until health reports real persistence.
+4. Implement one create-booking happy path against pilot bot; then WS-E commands.
+
+**Do not redo:** adapter, Vercel deploy, ChatIQ pilot env, stub smoke, command-library *spec* (implementation still open).
