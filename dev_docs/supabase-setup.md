@@ -30,6 +30,8 @@ supabase db push
 
 Tables: `contacts`, `identity_bindings`, `booking_sessions`, `catalog_items`, `bookings`.
 
+Also apply later migrations in order (e.g. `20261019000001_booking_slot_unique.sql` — cancels duplicate active slots, then unique index).
+
 ## 3) Verify
 
 ```bash

@@ -261,6 +261,7 @@ export async function listTakenStarts(input: {
     (data ?? [])
       .map((row) => row.starts_at)
       .filter((v): v is string => typeof v === "string")
+      .map((v) => new Date(v).toISOString())
   );
 }
 
@@ -333,6 +334,13 @@ export async function listRecentBookings(input?: {
   return data ?? [];
 }
 
+export class SlotConflictError extends Error {
+  constructor(message = "That time was just taken") {
+    super(message);
+    this.name = "SlotConflictError";
+  }
+}
+
 export async function createBooking(input: {
   team_id: string;
   bot_id: string;
@@ -345,6 +353,24 @@ export async function createBooking(input: {
   const supabase = createBookingAdminClient();
   if (!supabase) throw new Error("Supabase not configured");
 
+  const startsAt = new Date(input.starts_at).toISOString();
+
+  const { data: clash, error: clashError } = await supabase
+    .from("bookings")
+    .select("id")
+    .eq("team_id", input.team_id)
+    .eq("bot_id", input.bot_id)
+    .eq("starts_at", startsAt)
+    .in("status", ["pending", "confirmed"])
+    .maybeSingle();
+
+  if (clashError) {
+    throw new Error(`bookings conflict check failed: ${clashError.message}`);
+  }
+  if (clash) {
+    throw new SlotConflictError();
+  }
+
   const { data, error } = await supabase
     .from("bookings")
     .insert({
@@ -354,13 +380,17 @@ export async function createBooking(input: {
       session_id: input.session_id,
       catalog_item_id: input.catalog_item_id,
       status: "confirmed",
-      starts_at: input.starts_at,
+      starts_at: startsAt,
       timezone: input.timezone,
     })
     .select("id, status, starts_at, timezone, catalog_item_id")
     .single();
 
   if (error || !data) {
+    // Unique index race: treat as slot conflict.
+    if (error?.code === "23505") {
+      throw new SlotConflictError();
+    }
     throw new Error(`bookings insert failed: ${error?.message ?? "unknown"}`);
   }
   return data as DbBooking;

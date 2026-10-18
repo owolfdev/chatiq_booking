@@ -20,6 +20,7 @@ import {
   listTakenStarts,
   probeSupabasePersistence,
   resolveOrCreateContact,
+  SlotConflictError,
   updateSessionStep,
 } from "@/lib/supabase/store";
 
@@ -131,27 +132,46 @@ export async function handleTurn(
     if (offered && text) {
       const chosen = matchSlotChoice(text, offered);
       if (chosen) {
-        const booking = await createBooking({
-          team_id: body.team_id,
-          bot_id: body.bot_id,
-          contact_id: contact.id,
-          session_id: session.id,
-          catalog_item_id: catalog?.id ?? null,
-          starts_at: chosen.starts_at,
-          timezone,
-        });
-        await updateSessionStep(session.id, "booked");
-        return okReply({
-          reply_text: `Booked ${serviceName} for ${chosen.label}. Booking id ${booking.id.slice(0, 8)}.`,
-          session_id: session.id,
-          contact_id: contact.id,
-          ui: {
-            command: "booking.create",
-            booking_id: booking.id,
-            starts_at: booking.starts_at,
-            status: booking.status,
-          },
-        });
+        try {
+          const booking = await createBooking({
+            team_id: body.team_id,
+            bot_id: body.bot_id,
+            contact_id: contact.id,
+            session_id: session.id,
+            catalog_item_id: catalog?.id ?? null,
+            starts_at: chosen.starts_at,
+            timezone,
+          });
+          await updateSessionStep(session.id, "booked");
+          return okReply({
+            reply_text: `Booked ${serviceName} for ${chosen.label}. Booking id ${booking.id.slice(0, 8)}.`,
+            session_id: session.id,
+            contact_id: contact.id,
+            ui: {
+              command: "booking.create",
+              booking_id: booking.id,
+              starts_at: booking.starts_at,
+              status: booking.status,
+            },
+          });
+        } catch (err) {
+          if (!(err instanceof SlotConflictError)) throw err;
+          const taken = await listTakenStarts({
+            team_id: body.team_id,
+            bot_id: body.bot_id,
+          });
+          const slots = generateOfferSlots({
+            timeZone: timezone,
+            takenStarts: taken,
+          });
+          await updateSessionStep(session.id, encodeOfferedSlots(slots));
+          return okReply({
+            reply_text: `Sorry — that time was just taken. Pick another:\n${formatSlotList(slots)}`,
+            session_id: session.id,
+            contact_id: contact.id,
+            ui: { command: "booking.create", slots },
+          });
+        }
       }
 
       return okReply({
