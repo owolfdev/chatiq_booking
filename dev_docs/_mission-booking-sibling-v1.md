@@ -16,7 +16,7 @@ Owner: Engineering
    BOOKING_SIBLING_BOT_IDS=<pilot-bot-uuid>
    ```
    Restart ChatIQ after env changes. Do **not** commit secrets.
-2. **Identify or create a pilot bot** — One bot UUID only. Set that bot’s **Booking** mode to `full`. Put its UUID in `BOOKING_SIBLING_BOT_IDS` (allowlist keeps other bots off the sibling).
+2. **Identify or create a pilot bot** — Pilot slug: **`booking-system-test-bot`**. Set **Booking** mode to `full`. Copy Bot ID from bot settings (Bot Details) into `BOOKING_SIBLING_BOT_IDS` (allowlist keeps other bots off the sibling).
 3. **Smoke / test toward DoD** — Chat the pilot bot (web or channel); expect the stub booking reply from the sibling. Confirm fail-closed if sibling is down. Then continue DoD: wire Supabase (project already provisioned), schema, first bookable happy-path, minimal admin.
 4. **After pilot works** — Vertical slice on real DB; later clear/widen allowlist for release; archive legacy engine when ready.
 
