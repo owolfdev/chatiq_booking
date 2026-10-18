@@ -18,6 +18,7 @@ npm run dev   # http://localhost:3003
 - Mission: [`dev_docs/_mission-booking-sibling-v1.md`](./dev_docs/_mission-booking-sibling-v1.md)
 - API contract: [`dev_docs/api-contract-v0.md`](./dev_docs/api-contract-v0.md)
 - Intent → commands: [`dev_docs/booking-command-library.md`](./dev_docs/booking-command-library.md)
+- Supabase setup: [`dev_docs/supabase-setup.md`](./dev_docs/supabase-setup.md)
 
 ## Deploy
 
@@ -45,4 +46,4 @@ Any non-welcome message to that bot calls the sibling; legacy booking engine is 
 
 ## Persistence
 
-Runtime is still **in-memory mock** until the Supabase client is wired. Dedicated project is provisioned (env keys only — see mission); schema + client are the next engineering slice after the ChatIQ pilot smoke.
+Supabase client is wired. Apply the migration once (see [`dev_docs/supabase-setup.md`](./dev_docs/supabase-setup.md)); until then turns **fall back to mock** and `/api/health` reports `supabase.reachable: false`.

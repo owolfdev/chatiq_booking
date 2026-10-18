@@ -5,7 +5,7 @@ import {
   type BookingTurnRequest,
 } from "@/lib/contract";
 import { requireServiceAuth } from "@/lib/env";
-import { handleMockTurn } from "@/lib/mock/turn-handler";
+import { handleTurn } from "@/lib/turn-handler";
 
 export const runtime = "nodejs";
 
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const result = handleMockTurn({
+  const result = await handleTurn({
     ...req,
     contract_version: BOOKING_API_CONTRACT_VERSION,
   });
