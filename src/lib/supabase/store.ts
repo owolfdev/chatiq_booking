@@ -295,6 +295,44 @@ export async function getLatestOpenBooking(input: {
   return (data as DbBooking | null) ?? null;
 }
 
+export async function listRecentBookings(input?: {
+  team_id?: string;
+  bot_id?: string;
+  limit?: number;
+}): Promise<
+  Array<{
+    id: string;
+    team_id: string;
+    bot_id: string;
+    contact_id: string;
+    status: string;
+    starts_at: string | null;
+    timezone: string;
+    created_at: string;
+    catalog_item_id: string | null;
+  }>
+> {
+  const supabase = createBookingAdminClient();
+  if (!supabase) return [];
+
+  let query = supabase
+    .from("bookings")
+    .select(
+      "id, team_id, bot_id, contact_id, status, starts_at, timezone, created_at, catalog_item_id"
+    )
+    .order("starts_at", { ascending: true, nullsFirst: false })
+    .limit(input?.limit ?? 50);
+
+  if (input?.team_id) query = query.eq("team_id", input.team_id);
+  if (input?.bot_id) query = query.eq("bot_id", input.bot_id);
+
+  const { data, error } = await query;
+  if (error) {
+    throw new Error(`bookings list failed: ${error.message}`);
+  }
+  return data ?? [];
+}
+
 export async function createBooking(input: {
   team_id: string;
   bot_id: string;

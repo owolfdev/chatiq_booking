@@ -64,7 +64,7 @@ In-process booking in `chatiq` coupled core chat to a large engine. Extract to a
 - [x] Migration authored: `contacts` + `identity_bindings` + `booking_sessions` + `catalog_items` + `bookings`
 - [x] **Apply migration** in Supabase SQL Editor
 - [x] One catalog item + availability + create booking (reply `1`/`2`/`3`)
-- [ ] Minimal admin schedule view
+- [x] Minimal admin schedule view (`/admin` + `GET /api/v1/admin/bookings`)
 
 ### WS-C — Identity (phased)
 
@@ -249,3 +249,23 @@ chatiq:         [#########___________] ~45% -> re-smoke pilot chat after Vercel 
 1. Vercel env + redeploy; pilot chat smoke.
 2. Minimal admin schedule view.
 3. WS-E command library.
+
+### 2026-10-19 — Vercel supabase live + admin schedule
+
+**Changed**
+- Confirmed prod health `persistence: "supabase"` + slot offer on Vercel.
+- Added `/admin` schedule UI + `GET /api/v1/admin/bookings` (Bearer token).
+
+**Verified**
+- Prod API offer-slots smoke; typecheck + build (admin route present).
+
+**Approx. toward DoD:** **~75%**.
+
+```text
+chatiq-booking: [###############_____] ~75% -> DoD
+```
+
+**Next**
+1. Pilot chat in ChatIQ (book → pick `1`).
+2. WS-E intent → command library.
+3. Lookup/cancel; archive legacy later.
