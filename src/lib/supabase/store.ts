@@ -225,6 +225,73 @@ export async function ensurePilotCatalogItem(input: {
   return created;
 }
 
+export type DbCatalogItem = {
+  id: string;
+  slug: string;
+  title: string;
+  duration_minutes: number;
+  active: boolean;
+};
+
+/** Active catalog items for a team/bot (seeds the pilot item if none). */
+export async function listCatalogItems(input: {
+  team_id: string;
+  bot_id: string;
+}): Promise<DbCatalogItem[]> {
+  const supabase = createBookingAdminClient();
+  if (!supabase) return [];
+  await ensurePilotCatalogItem(input);
+  const { data, error } = await supabase
+    .from("catalog_items")
+    .select("id, slug, title, duration_minutes, active")
+    .eq("team_id", input.team_id)
+    .eq("bot_id", input.bot_id)
+    .eq("active", true)
+    .order("title", { ascending: true });
+  if (error) {
+    throw new Error(`catalog list failed: ${error.message}`);
+  }
+  return (data ?? []) as DbCatalogItem[];
+}
+
+export async function getContactById(input: {
+  team_id: string;
+  contact_id: string;
+}): Promise<DbContact | null> {
+  const supabase = createBookingAdminClient();
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from("contacts")
+    .select("id, team_id, name, email, phone")
+    .eq("team_id", input.team_id)
+    .eq("id", input.contact_id)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`contacts by id failed: ${error.message}`);
+  }
+  return (data as DbContact | null) ?? null;
+}
+
+export async function getBookingById(input: {
+  team_id: string;
+  bot_id: string;
+  booking_id: string;
+}): Promise<DbBooking | null> {
+  const supabase = createBookingAdminClient();
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from("bookings")
+    .select("id, status, starts_at, timezone, catalog_item_id, contact_id")
+    .eq("team_id", input.team_id)
+    .eq("bot_id", input.bot_id)
+    .eq("id", input.booking_id)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`bookings by id failed: ${error.message}`);
+  }
+  return (data as DbBooking | null) ?? null;
+}
+
 export async function updateSessionStep(
   sessionId: string,
   step: string
@@ -271,6 +338,7 @@ export type DbBooking = {
   starts_at: string | null;
   timezone: string;
   catalog_item_id: string | null;
+  contact_id?: string;
 };
 
 /**

@@ -119,6 +119,104 @@ export function generateOfferSlots(params: {
   return slots;
 }
 
+export type TimeOfDay = "morning" | "afternoon" | "evening" | "any";
+
+export function normalizeTimeOfDay(value: unknown): TimeOfDay {
+  return value === "morning" || value === "afternoon" || value === "evening"
+    ? value
+    : "any";
+}
+
+/** Pilot schedule hours (local) per time-of-day bucket. */
+const TIME_OF_DAY_HOURS: Record<TimeOfDay, number[]> = {
+  morning: [10],
+  afternoon: [14],
+  evening: [],
+  any: [10, 14],
+};
+
+function parseWindowDay(
+  value: string | undefined,
+  timeZone: string,
+  fallback: Date
+): { year: number; month: number; day: number } {
+  if (value?.trim()) {
+    const v = value.trim();
+    const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+    if (dateOnly) {
+      return {
+        year: Number(dateOnly[1]),
+        month: Number(dateOnly[2]),
+        day: Number(dateOnly[3]),
+      };
+    }
+    const parsed = new Date(v);
+    if (!Number.isNaN(parsed.getTime())) {
+      const p = zonedParts(parsed, timeZone);
+      return { year: p.year, month: p.month, day: p.day };
+    }
+  }
+  const p = zonedParts(fallback, timeZone);
+  return { year: p.year, month: p.month, day: p.day };
+}
+
+function dayDiff(
+  a: { year: number; month: number; day: number },
+  b: { year: number; month: number; day: number }
+): number {
+  return Math.round(
+    (Date.UTC(b.year, b.month - 1, b.day) -
+      Date.UTC(a.year, a.month - 1, a.day)) /
+      86_400_000
+  );
+}
+
+/**
+ * Filterable availability for the commands API: explicit local date window +
+ * optional time-of-day, future slots only, taken slots excluded.
+ * Returns at most `count` (clamped 1–5) slots; empty array is a valid result.
+ */
+export function searchAvailability(params: {
+  timeZone: string;
+  now?: Date;
+  count?: number;
+  takenStarts?: Set<string>;
+  dateFrom?: string;
+  dateTo?: string;
+  timeOfDay?: TimeOfDay;
+}): OfferSlot[] {
+  const timeZone = params.timeZone || "Asia/Bangkok";
+  const now = params.now ?? new Date();
+  const count = Math.min(5, Math.max(1, params.count ?? 3));
+  const taken = params.takenStarts ?? new Set<string>();
+  const hours = TIME_OF_DAY_HOURS[params.timeOfDay ?? "any"];
+
+  const startDay = parseWindowDay(params.dateFrom, timeZone, now);
+  const defaultEnd = new Date(now.getTime() + 7 * 86_400_000);
+  const endDay = parseWindowDay(params.dateTo, timeZone, defaultEnd);
+  const totalDays = Math.min(62, Math.max(0, dayDiff(startDay, endDay)));
+
+  const slots: OfferSlot[] = [];
+  for (let offset = 0; offset <= totalDays && slots.length < count; offset++) {
+    const day = addDays(startDay.year, startDay.month, startDay.day, offset);
+    const probe = localWallToUtc(day.year, day.month, day.day, 12, 0, timeZone);
+    if (WEEKEND.has(zonedParts(probe, timeZone).weekday)) continue;
+    for (const hour of hours) {
+      if (slots.length >= count) break;
+      const starts = localWallToUtc(day.year, day.month, day.day, hour, 0, timeZone);
+      if (starts.getTime() <= now.getTime() + 60 * 60 * 1000) continue;
+      const iso = starts.toISOString();
+      if (taken.has(iso)) continue;
+      slots.push({
+        index: slots.length + 1,
+        starts_at: iso,
+        label: formatInTimeZone(starts, timeZone),
+      });
+    }
+  }
+  return slots;
+}
+
 export function formatSlotList(slots: OfferSlot[]): string {
   return slots.map((s) => `${s.index}) ${s.label}`).join("\n");
 }

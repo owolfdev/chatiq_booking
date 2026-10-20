@@ -4,7 +4,7 @@ Service-to-service JSON over HTTPS. Auth: `Authorization: Bearer <shared token>`
 
 Product direction (locked 2026-10-21): **LLM interprets → typed booking commands → deterministic sibling**. See [`booking-command-library.md`](./booking-command-library.md).
 
-> **Status:** this v0 turn contract is the live pilot contract and stays as fallback/API-smoke path. Phase 1 adds `POST /api/v1/commands/execute` (structured data in/out, no customer prose) for the ChatIQ LLM tool loop — update this doc when it lands.
+> **Status:** this v0 turn contract is the live pilot contract and stays as fallback/API-smoke path. Phase 1 has added `POST /api/v1/commands/execute` (below) for the ChatIQ LLM tool loop.
 
 ## `GET /api/health`
 
@@ -84,6 +84,56 @@ Product direction (locked 2026-10-21): **LLM interprets → typed booking comman
 ```
 
 ChatIQ adapter: timeout / non-2xx / `ok: false` → fail closed (core chat continues).
+
+## `POST /api/v1/commands/execute` (Phase 1 — structured commands)
+
+Deterministic in/out, **no customer prose, no natural-language parsing**. Auth: same Bearer token. The caller (ChatIQ LLM tool loop, admin UI, smoke script) renders language.
+
+### Request
+
+```json
+{
+  "contract_version": "0",
+  "team_id": "uuid",
+  "bot_id": "uuid",
+  "command": "booking.get_availability",
+  "slots": {
+    "service_slug": "consultation",
+    "date_from": "2026-10-26",
+    "date_to": "2026-10-30",
+    "time_of_day": "morning",
+    "limit": 3
+  },
+  "actor": { "type": "customer" },
+  "identity_claims": [
+    { "provider": "chatiq_conversation", "external_id": "…", "verified": false }
+  ],
+  "conversation_id": null,
+  "timezone": "Asia/Bangkok"
+}
+```
+
+| Command | Key `slots` | Notes |
+|---------|-------------|-------|
+| `booking.list_services` | — | no identity needed |
+| `booking.get_availability` | `service_id`/`service_slug`, `date_from`, `date_to`, `time_of_day` (`morning`/`afternoon`/`evening`/`any`), `limit` ≤ 5 | future, untaken slots only; empty array is success |
+| `booking.get_existing` | `contact_id` or identity | next upcoming booking or `booking: null` |
+| `booking.create` | `starts_at` (ISO, from availability), service | `SLOT_IN_PAST` / `SLOT_TAKEN` on invalid slot |
+| `booking.cancel` | `booking_id` (or identity's next booking), `confirmed: true` | `CONFIRMATION_REQUIRED` without `confirmed` |
+| `booking.reschedule` | `booking_id`, `new_starts_at`, `confirmed: true` | creates new booking **before** cancelling the old one |
+
+Identity: provide `slots.contact_id`, or `identity_claims` / `conversation_id` (resolved to a booking contact). Customer actors can only act on their own bookings; staff actors (`agent`/`admin`/`provider`) may act team-wide (Phase 3 UI).
+
+### Success / failure
+
+```json
+{ "contract_version": "0", "ok": true, "command": "booking.get_availability", "data": { "service": {}, "slots": [], "timezone": "Asia/Bangkok" } }
+{ "contract_version": "0", "ok": false, "command": "booking.create", "error": "…", "code": "SLOT_TAKEN" }
+```
+
+HTTP status: 200 ok · 400 invalid/unknown/confirmation · 404 booking/contact · 409 slot/past/state conflicts · 401 unauthorized.
+
+**Exit test (no LLM):** `npm run smoke:commands` (local server on :3003 or `BOOKING_SMOKE_BASE_URL`) — 20 checks covering the whole lifecycle. See `scripts/smoke-commands.mjs`.
 
 ## Admin
 

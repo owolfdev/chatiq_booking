@@ -95,7 +95,7 @@ Actor context on every command: `actor_type` (customer/agent/provider/admin), `a
 ## 6) Contract evolution
 
 - **v0 (today, pilot):** `POST /api/v1/turns/handle` — ChatIQ sends raw `message_text` + optional pre-selected `command`; sibling classifies (English heuristics) and returns English `reply_text`. Proven in pilot; now frozen as fallback/API-smoke path.
-- **v1 (Phase 1–2):** add `POST /api/v1/commands/execute` — `{ command, slots, actor, identity_claims, timezone }` → structured `{ ok, data }`, no prose. The ChatIQ LLM tool loop calls this. Heuristic classifiers (both repos) demote to: canned/button shortcuts + session continuation (`1/2/3`, confirm steps) + v0 fallback. They are **not** extended to new languages.
+- **v1 (Phase 1–2):** `POST /api/v1/commands/execute` — `{ command, slots, actor, identity_claims, timezone }` → structured `{ ok, data }`, no prose. **Landed in Phase 1** (see `api-contract-v0.md`); the ChatIQ LLM tool loop (Phase 2) will call this. Heuristic classifiers (both repos) demote to: canned/button shortcuts + session continuation (`1/2/3`, confirm steps) + v0 fallback. They are **not** extended to new languages.
 
 ## 7) Explicit non-goals (v1)
 

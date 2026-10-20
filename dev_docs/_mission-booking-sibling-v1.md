@@ -8,11 +8,11 @@ Owner: Engineering
 
 **The one roadmap is this file (§2 DoD + §3 workstreams). Do this next, in order:**
 
-1. **Phase 1 — Tool-ready sibling** (in `chatiq-booking`)
-   - [x] Fix past-booking bug (`getLatestOpenBooking` now requires `starts_at >= now`, returns next upcoming) — 2026-10-21, typecheck ✅; live re-smoke after next deploy.
-   - [ ] `POST /api/v1/commands/execute`: structured `{command, slots, actor}` → `{ok, data}`, no customer prose.
-   - [ ] `booking.list_services` + filterable `booking.get_availability` (service + date window + time-of-day, ≤5, future, not taken).
-   - [ ] Prove every command via direct API calls (no LLM) — see DoD P1 exit tests.
+1. **Phase 1 — Tool-ready sibling** (in `chatiq-booking`) — **code complete 2026-10-21; pending push/deploy + deployed smoke**
+   - [x] Fix past-booking bug (`getLatestOpenBooking` now requires `starts_at >= now`, returns next upcoming) — 2026-10-21, typecheck ✅; live re-smoke after deploy.
+   - [x] `POST /api/v1/commands/execute`: structured `{command, slots, actor}` → `{ok, data}`, no customer prose.
+   - [x] `booking.list_services` + filterable `booking.get_availability` (service + date window + time-of-day, ≤5, future, not taken).
+   - [x] Prove every command via direct API calls (no LLM): `npm run smoke:commands` — **20/20 checks pass locally** (real Supabase). Re-run against Vercel after deploy (`BOOKING_SMOKE_BASE_URL=https://chatiq-booking.vercel.app`).
 2. **Phase 2 — LLM concierge** (in `chatiq`): tool loop on pilot bot; policy prompt + today/timezone context; smoke EN/TH/ZH + narrowing + next-month. See DoD P2.
 3. **Phase 3 — Admin doors**: console (calendar/table, command buttons, ⌘K, commands reference, audit) → copilot with confirm-cards. See DoD P3.
 4. Parallel/later — widen `BOOKING_SIBLING_BOT_IDS` per added bot (smoke each); WS-D code archive of legacy engine (docs already archived 2026-10-21); WS-C identity connect-link; payments.
@@ -62,10 +62,10 @@ In-process booking in `chatiq` coupled core chat to a large engine. Extract to a
 Done when **every command can be executed and verified via direct API calls with no LLM in the loop**:
 
 - [x] Past bookings are never treated as upcoming (`starts_at >= now` in `getLatestOpenBooking`) — 2026-10-21
-- [ ] `POST /api/v1/commands/execute` returns structured data (no customer-facing prose) for: `list_services`, `get_existing`, `get_availability`, `create`, `cancel`, `reschedule`
-- [ ] `get_availability` filters by service + date window + optional time-of-day; returns ≤ 5 slots, all future, none taken
-- [ ] Mutations validate server-side: slot still open, booking exists & upcoming, cancel/reschedule require `confirmed=true`
-- [ ] API exit tests pass: create→lookup→reschedule→cancel happy path; double-book same slot rejected; past booking invisible to lookup/cancel; availability window with no slots returns empty (not an error)
+- [x] `POST /api/v1/commands/execute` returns structured data (no customer-facing prose) for: `list_services`, `get_existing`, `get_availability`, `create`, `cancel`, `reschedule`
+- [x] `get_availability` filters by service + date window + optional time-of-day; returns ≤ 5 slots, all future, none taken
+- [x] Mutations validate server-side: slot still open, booking exists & upcoming, cancel/reschedule require `confirmed=true`
+- [x] API exit tests pass: `npm run smoke:commands` 20/20 locally (create→lookup→reschedule→cancel; double-book rejected; confirmation gate; past create rejected; past/evening windows empty-not-error). Deployed re-run pending push.
 
 ### Phase 2 — LLM concierge (`chatiq`)
 
@@ -132,13 +132,13 @@ Phases 1–2 complete on the pilot bot + Phase 3 console (copilot may trail). Le
 - [x] `booking.lookup` + `booking.clarify` + cancel confirm + reschedule
 - Note: heuristics now **fallback/shortcuts only** under the locked LLM-concierge design; do not extend them per-language.
 
-### WS-F — Phase 1: tool-ready sibling (NEXT)
+### WS-F — Phase 1: tool-ready sibling
 
 - [x] Past-booking bug fix (`starts_at >= now`)
-- [ ] `POST /api/v1/commands/execute` (structured in/out, actor context)
-- [ ] `booking.list_services`; filterable `booking.get_availability` (window, time-of-day, ≤5)
-- [ ] Server-side mutation validation (`confirmed=true`, future/open checks)
-- [ ] API exit tests (no LLM): happy path, double-book, past-booking invisibility, empty window
+- [x] `POST /api/v1/commands/execute` (structured in/out, actor context)
+- [x] `booking.list_services`; filterable `booking.get_availability` (window, time-of-day, ≤5)
+- [x] Server-side mutation validation (`confirmed=true`, future/open checks; reschedule creates new before cancelling old)
+- [x] API exit tests (no LLM): `scripts/smoke-commands.mjs` — 20/20 pass locally; deployed re-run pending push
 
 ### WS-G — Phase 2: LLM concierge (ChatIQ)
 
@@ -201,6 +201,27 @@ chatiq-booking: [#################___] ~85% -> DoD
 ```
 
 **Next:** chat-smoke cancel/reschedule; later widen allowlist / archive legacy / LLM tool select.
+
+### 2026-10-21 — Phase 1: tool-ready sibling (commands API + exit smoke)
+
+**Changed**
+- `POST /api/v1/commands/execute` (`src/lib/command-execute.ts` + route): `list_services`, `get_existing`, `get_availability`, `create`, `cancel`, `reschedule`. Structured `{ok, data}` / `{ok:false, code}`; actor context; customer ownership scoping; staff bypass for Phase 3.
+- Availability: `searchAvailability` — local date window + `time_of_day` (morning=10:00, afternoon=14:00, evening=none in pilot) + ≤5, future, untaken. Turn-handler offer path unchanged.
+- Store: `listCatalogItems`, `getContactById`, `getBookingById`.
+- Reschedule via commands creates the new booking **before** cancelling the old (conflict-safe, improves on turn-handler order).
+- Contract types + `api-contract-v0.md` commands section.
+
+**Verified**
+- `npm run typecheck` ✅
+- `npm run smoke:commands` against local server + real Supabase: **20/20 checks** (services, filtered availability incl. morning/evening/past windows, create→existing→double-book `SLOT_TAKEN`→confirmation gate→reschedule→cancel→past-create `SLOT_IN_PAST`). Smoke bookings cleaned up (cancelled).
+
+**Approx. toward DoD:** Phase 1 **~90%** (only deployed re-run outstanding).
+
+```text
+chatiq-booking: Phase 1 (tool-ready): [##################__] ~90%
+```
+
+**Next:** push + deploy, re-run smoke against Vercel (`BOOKING_SMOKE_BASE_URL=https://chatiq-booking.vercel.app npm run smoke:commands`), then Phase 2 LLM tool loop in `chatiq`.
 
 ### 2026-10-21 — Design locked: LLM concierge; Phase 1 started; legacy docs archived
 

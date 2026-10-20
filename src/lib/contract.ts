@@ -54,6 +54,44 @@ export type BookingTurnError = {
 
 export type BookingTurnResponse = BookingTurnReply | BookingTurnError;
 
+/** Actor attached to every commands/execute call (see booking-command-library.md §5). */
+export type BookingActor = {
+  type: "customer" | "agent" | "provider" | "admin" | "system";
+  id?: string | null;
+};
+
+/**
+ * Structured command execution (Phase 1) — deterministic in/out, no customer prose.
+ * `command` uses catalog IDs from booking-command-library.md §2.
+ */
+export type BookingCommandExecuteRequest = {
+  contract_version?: typeof BOOKING_API_CONTRACT_VERSION;
+  team_id: string;
+  bot_id: string;
+  command: string;
+  /** Structured args: service_id/service_slug, date_from/date_to, time_of_day, starts_at, booking_id, confirmed, contact_id, limit */
+  slots?: Record<string, unknown> | null;
+  actor?: BookingActor | null;
+  identity_claims?: IdentityBindingClaim[];
+  conversation_id?: string | null;
+  timezone?: string | null;
+};
+
+export type BookingCommandExecuteResponse =
+  | {
+      contract_version: typeof BOOKING_API_CONTRACT_VERSION;
+      ok: true;
+      command: string;
+      data: Record<string, unknown>;
+    }
+  | {
+      contract_version: typeof BOOKING_API_CONTRACT_VERSION;
+      ok: false;
+      command?: string;
+      error: string;
+      code: string;
+    };
+
 export type BookingHealthResponse = {
   ok: true;
   service: "chatiq-booking";
