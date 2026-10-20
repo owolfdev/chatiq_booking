@@ -1,21 +1,18 @@
 # Mission: Booking sibling v1 (`chatiq-booking`)
 
-Last updated: 2026-10-19 (EOD handoff)  
-Status: **In progress** — WS-E command library **shipped**; next **chat-smoke cancel/reschedule**, then widen allowlist / archive legacy.  
+Last updated: 2026-10-21  
+Status: **In progress** — WS-E **chat-smoked (cancel + reschedule pass)**; next **widen allowlist / archive legacy**.  
 Owner: Engineering
 
 ## Resume here (next session)
 
 **Do this next, in order:**
 
-1. **Chat-smoke cancel + reschedule** (first action tomorrow)
-   - Pilot bot: `booking-system-test-bot` (`ed98722d-bbad-485d-a187-c54b4429d544`)
-   - Ensure ChatIQ has `BOOKING_RUNTIME=sibling` + URL/token + allowlist; sibling Vercel redeployed from latest `main`.
-   - Script: book a slot → `Please cancel my booking` → `yes` → confirm gone in `/admin`.
-   - Then book again → `reschedule my appointment` → pick new slot → `/admin` shows updated time.
-2. **Widen allowlist** — add more bot IDs to `BOOKING_SIBLING_BOT_IDS` (or clear gate when ready for broader pilot).
-3. **WS-D — Archive legacy** — tag `pre-booking-sibling-archive`; remove old in-`chatiq` engine from hot paths.
-4. Later — LLM tool-select for commands; payments; connect-link identity (WS-C).
+1. **Widen allowlist** — add more bot IDs to `BOOKING_SIBLING_BOT_IDS` in `chatiq/.env.local` (+ Vercel env if prod chat needs it), restart ChatIQ, smoke each added bot (`book` → slot → confirm). Or clear the gate only when ready for broader pilot.
+2. **WS-D — Archive legacy** — tag `pre-booking-sibling-archive` in `chatiq`; remove old in-`chatiq` booking engine from hot paths; keep `dev_docs/booking-system/` as legacy reference.
+3. Later — LLM tool-select for commands; payments; connect-link identity (WS-C).
+
+**Minor known quirk (not blocking):** reschedule offer list can include the just-freed original slot (cancel-then-offer). Picking it would rebook the same time. Consider excluding the original `starts_at` from the reschedule offer later.
 
 **Already done (do not redo):**
 - Deploy: https://chatiq-booking.vercel.app/ — health `persistence: "supabase"`.
@@ -24,7 +21,7 @@ Owner: Engineering
 - Chat smoke: create → slots → confirm → `/admin`; lookup / create-guard / clarify verified.
 - Slot conflict: unique index + re-offer on clash; smoke `team-pilot` duplicate cancelled.
 - WS-E: command catalog + ChatIQ heuristics + canned→command map + cancel confirm + reschedule.
-- Latest pushed: `chatiq` `1bfd5390`, `chatiq-booking` `23266a8` (plus this handoff commit).
+- Chat-smoke 2026-10-21: cancel (confirm → cancelled, lookup empty) + reschedule (10:00 → 14:00) verified in DB via admin API: `2b8671b4` cancelled, `c13789f4` confirmed.
 
 ## Decisions (locked)
 
@@ -140,6 +137,24 @@ chatiq-booking: [#################___] ~85% -> DoD
 ```
 
 **Next:** chat-smoke cancel/reschedule; later widen allowlist / archive legacy / LLM tool select.
+
+### 2026-10-21 — Chat-smoke cancel + reschedule ✅
+
+**Verified (live chat, local ChatIQ → Vercel sibling; admin API cross-check)**
+- Existing-booking guard: `I want to book` with an active Consultation → offered check/cancel/reschedule, not a duplicate.
+- Cancel: `Please cancel my booking` → confirm prompt → `yes` → `Cancelled…`; subsequent lookup: “I don’t see an upcoming Consultation” — DB: Tue 20 Oct 10:00 (Asia/Bangkok) booking `status=cancelled`.
+- Create: slots offered → booked Wed 21 Oct 10:00, id `2b8671b4`.
+- Reschedule: `please reschedule my appointment` → new slot list → picked `2` → booked Wed 21 Oct 14:00, id `c13789f4`. DB: `2b8671b4` now `cancelled`, `c13789f4` `confirmed` at 07:00 UTC (= 14:00 Bangkok). Cancel-then-rebook semantics confirmed.
+- Note: reschedule list included the freed 10:00 slot (see Resume-here quirk).
+
+**Approx. toward DoD:** **~90%**.
+
+```text
+chatiq-booking: [##################__] ~90% -> DoD
+chatiq:         [#############_______] ~65% -> pilot path fully smoked (create/lookup/clarify/cancel/reschedule)
+```
+
+**Next:** widen `BOOKING_SIBLING_BOT_IDS`; then WS-D archive legacy.
 
 ### 2026-10-19 — EOD handoff (stop for tomorrow)
 
