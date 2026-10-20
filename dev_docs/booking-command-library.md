@@ -1,76 +1,109 @@
-# Booking command library (intent → typed actions)
+# Booking design: LLM concierge → deterministic command library
 
-Last updated: 2026-10-19  
-Status: **Implementing** (WS-E)  
+Last updated: 2026-10-21
+Status: **LOCKED design** (supersedes the heuristic-first WS-E v0 direction)
 Owner: Engineering
+Mission: [`_mission-booking-sibling-v1.md`](./_mission-booking-sibling-v1.md)
 
-## Problem
+## 1) The decision (locked 2026-10-21)
 
-Keyword / canned triggers on words like “booking” or “appointment” are **ambiguous**. Same surface form, different speech acts:
+**The LLM interprets; the deterministic sibling executes. The customer never touches the deterministic system directly.**
 
-| Customer says | Not the same as |
-|---------------|-----------------|
-| I want to make a booking | Create |
-| Can you check if I already have a booking? | Lookup |
-| When booking a service can I select my provider? | FAQ / policy |
-| I’d like to schedule an appointment | Create |
-| I already have an appointment — can I check the time? | Lookup |
-
-## Decision
-
-**Prefer inferred intent + a closed library of booking commands** over keyword-first ownership.
-
-1. Understand speech act (create / lookup / change / cancel / FAQ / clarify).
-2. Select a typed command from a fixed catalog.
-3. Execute only through gated paths; sibling owns booking effects.
-4. Keywords/buttons = shortcuts to the same command IDs.
-
-## v0 command catalog
-
-| Command | Speech act | Mutating? | Pilot status |
-|---------|------------|-----------|--------------|
-| `booking.create` | Start / continue new booking | Yes (on commit) | **Done** |
-| `booking.lookup` | Check existing booking / time | No | **Done** |
-| `booking.clarify` | Ambiguous intent | No | **Done** |
-| `booking.cancel` | Cancel (yes/no confirm) | Yes | **Done** |
-| `booking.reschedule` | Cancel current + offer new slots | Yes | **Done** |
-| `booking.faq` | Policy / how-to | No | Pilot stub copy |
-
-**Rules**
-- Unknown / low confidence → `booking.clarify` or stay in core chat (ChatIQ gate).
-- Active session in `awaiting_slot` / mid-create → continue `booking.create` (slot pick).
-- Mutating commands: confirm when mid-confidence (later).
-
-## Ownership
-
-| Concern | Owner |
-|---------|--------|
-| Intent → command selection | Prefer **ChatIQ** (heuristic v0; LLM tool-call later) |
-| Command execution + session | **`chatiq-booking`** |
-| If `command` omitted on turn | Sibling runs same heuristic classifier (safe for API smoke) |
-
-## Wire format
-
-Optional on `POST /api/v1/turns/handle` (contract still `"0"`):
-
-```json
-{
-  "command": "booking.create",
-  "slots": {},
-  "confidence": 0.9
-}
+```text
+Customer (any language, any channel)
+        │  natural language
+        ▼
+ChatIQ LLM — "concierge"
+  · discerns intent (book / check / cancel / reschedule / question)
+  · runs the narrowing conversation (service → week → day → time of day)
+  · replies in the customer's language
+        │  ONE fixed set of typed commands (English IDs, ISO dates, enums)
+        ▼
+chatiq-booking sibling — "ledger"
+  · deterministic only; never parses natural language
+  · validates everything (slot free, booking exists, time in future)
+  · returns structured facts, never prose for the customer
+        │  structured result
+        ▼
+LLM renders the reply in the customer's language
 ```
 
-See [`api-contract-v0.md`](./api-contract-v0.md).
+Why: deterministic keyword/regex intent per language does not scale (v0 heuristics are English-only; Thai does not segment on `\b`). One language-agnostic command set operated by a multilingual LLM replaces per-language phrase tables. This was validated in discussion 2026-10-21 after the English-only deterministic pilot (create/lookup/cancel/reschedule all chat-smoked successfully in English).
 
-## Canned shortcuts (ChatIQ)
+### Principles
 
-- `action: booking_start` → `booking.create`
-- `action_config.booking_command` → any catalog id (overrides)
+1. **One command set** is the only interface to booking state. Customers, the customer-facing LLM, admins, and admin tools all use it.
+2. **Intent is semantic, not linguistic.** `booking.get_availability(service, date_from, date_to, time_of_day)` means the same thing whether the customer asked in English, Thai, or Chinese.
+3. **The sibling is the source of truth.** The LLM never invents services, slots, prices, or booking state, and never writes to the database except through commands.
+4. **Procedure lives in tools + a short policy prompt — not in a fetched guide/RAG doc.** RAG/guide content is for *facts* (services, prices, policies, FAQ), never for step-by-step procedure.
+5. **Fail safe.** Unknown/low-confidence intent → ask a clarifying question. Sibling error/timeout → no booking action (fail closed, as today).
 
-## Roadmap
+## 2) Command catalog (the tool set)
 
-1. ~~Pilot create + admin + WS-E v0~~ **done**
-2. Later — LLM tool selection; widen allowlist; archive legacy
+Internal names stay English. Inputs/outputs are structured. `actor` is attached to every call (see §5).
 
-Mission: [`_mission-booking-sibling-v1.md`](./_mission-booking-sibling-v1.md) WS-E.
+### Customer-scope commands
+
+| Command | Mutating | Inputs | Returns |
+|---------|----------|--------|---------|
+| `booking.list_services` | No | — | services (id, title, duration) |
+| `booking.get_existing` | No | contact | next upcoming booking or none |
+| `booking.get_availability` | No | service, date_from, date_to, time_of_day?, limit ≤ 5 | matching open slots (ISO + tz) |
+| `booking.create` | Yes | service, starts_at (from a returned slot) | booking (id, status, starts_at) |
+| `booking.cancel` | Yes | booking_id, confirmed=true | booking status |
+| `booking.reschedule` | Yes | booking_id, new starts_at (from a returned slot) | old cancelled + new booking |
+| `booking.faq` *(data, not a command)* | No | — | service/policy facts for the LLM to answer from |
+
+### Admin-scope commands (Phase 3, same bus)
+
+`booking.admin_search` (by day/provider/service/customer/status), `booking.create_on_behalf`, plus the customer commands with admin scope, and `availability.block` / `availability.set_hours`. Admin-only commands are never exposed to the customer concierge.
+
+### What happened to the v0 commands
+
+`booking.create / lookup / clarify / cancel / reschedule / faq` remain the conceptual catalog. Changes: `lookup` → `get_existing`; `clarify` is an LLM conversation behavior, not a sibling command; availability becomes an explicit queryable command instead of an implicit step.
+
+## 3) Narrowing policy (how the LLM drives availability)
+
+Goal: never dump dozens of slots; never interrogate either.
+
+1. Collect only what's missing, **skipping anything already stated**: service → which week → which day → morning/afternoon/evening.
+2. The LLM is given **today's date, timezone, and booking horizon** in context, so "next Friday" / "next month" resolve before calling. The sibling validates the ISO window regardless.
+3. Search a **~7-day window** per `get_availability` call; offer the **closest ≤ 3–5 slots**.
+4. Offer "more / another day" by re-querying the next window — pagination is a new command call, not a longer list.
+5. Ideal shape:
+   - C: "I want to book" → AI: "What service would you like?"
+   - C: "Teeth cleaning" → AI: "This week or next?" … C: "Friday morning please"
+   - AI calls `get_availability(teeth-cleaning, <Fri window>, morning)` → offers 3 slots → customer picks → `booking.create` → confirmation in customer's language.
+
+## 4) Guardrails (sibling-enforced, not prompt-only)
+
+- `booking.create` / `reschedule` only accept a `starts_at` that is **currently open and in the future**; slot uniqueness enforced in DB (already live).
+- `get_existing` (and therefore lookup/cancel/reschedule) only sees bookings with `starts_at >= now` (bug fixed 2026-10-21).
+- Cancel/reschedule require an explicit customer confirmation in conversation before the LLM may call with `confirmed=true`; the sibling rejects unconfirmed mutations.
+- Every mutating call is idempotent-safe against double-submit (existing slot-conflict handling) and will be audit-logged with actor + before/after (Phase 3).
+
+## 5) Three interfaces, one bus
+
+| Interface | User | Confirmation UX |
+|-----------|------|-----------------|
+| **Customer concierge** (ChatIQ LLM) | Customers, any language | Conversational ("Shall I cancel…?" → yes) |
+| **Admin console** (booking `/admin` UI) | Human agents / providers | Direct: calendar/table, detail drawer with command buttons, ⌘K command palette, commands reference page |
+| **Admin copilot** (LLM in admin console) | Human agents | **Confirm cards**: LLM proposes a command (e.g. reschedule + notify customer); a human clicks Confirm/Edit/Dismiss. Never mutates silently. |
+
+Actor context on every command: `actor_type` (customer/agent/provider/admin), `actor_id`, `team_id`, scope. Customers: own contact only. Providers: own calendar. Agents: team-wide. If the LLM layer is down, the admin console still runs the business deterministically — the console is the fallback and the audit surface.
+
+## 6) Contract evolution
+
+- **v0 (today, pilot):** `POST /api/v1/turns/handle` — ChatIQ sends raw `message_text` + optional pre-selected `command`; sibling classifies (English heuristics) and returns English `reply_text`. Proven in pilot; now frozen as fallback/API-smoke path.
+- **v1 (Phase 1–2):** add `POST /api/v1/commands/execute` — `{ command, slots, actor, identity_claims, timezone }` → structured `{ ok, data }`, no prose. The ChatIQ LLM tool loop calls this. Heuristic classifiers (both repos) demote to: canned/button shortcuts + session continuation (`1/2/3`, confirm steps) + v0 fallback. They are **not** extended to new languages.
+
+## 7) Explicit non-goals (v1)
+
+- Sibling-side natural-language parsing, per-language regex/phrase tables.
+- Payments, external calendar sync, waitlists, multi-provider optimization.
+- Admin copilot executing mutations without a human confirm click.
+
+## 8) Roadmap
+
+Phases and exit criteria live in the mission DoD:
+[`_mission-booking-sibling-v1.md`](./_mission-booking-sibling-v1.md) §2–§3.

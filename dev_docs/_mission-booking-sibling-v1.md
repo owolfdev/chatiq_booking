@@ -1,18 +1,23 @@
 # Mission: Booking sibling v1 (`chatiq-booking`)
 
 Last updated: 2026-10-21  
-Status: **In progress** — WS-E **chat-smoked (cancel + reschedule pass)**; next **widen allowlist / archive legacy**.  
+Status: **In progress** — deterministic pilot **chat-smoked ✅**; design **locked: LLM concierge → deterministic commands** (see [`booking-command-library.md`](./booking-command-library.md)). Now **Phase 1: tool-ready sibling**.  
 Owner: Engineering
 
 ## Resume here (next session)
 
-**Do this next, in order:**
+**The one roadmap is this file (§2 DoD + §3 workstreams). Do this next, in order:**
 
-1. **Widen allowlist** — add more bot IDs to `BOOKING_SIBLING_BOT_IDS` in `chatiq/.env.local` (+ Vercel env if prod chat needs it), restart ChatIQ, smoke each added bot (`book` → slot → confirm). Or clear the gate only when ready for broader pilot.
-2. **WS-D — Archive legacy** — tag `pre-booking-sibling-archive` in `chatiq`; remove old in-`chatiq` booking engine from hot paths; keep `dev_docs/booking-system/` as legacy reference.
-3. Later — LLM tool-select for commands; payments; connect-link identity (WS-C).
+1. **Phase 1 — Tool-ready sibling** (in `chatiq-booking`)
+   - [x] Fix past-booking bug (`getLatestOpenBooking` now requires `starts_at >= now`, returns next upcoming) — 2026-10-21, typecheck ✅; live re-smoke after next deploy.
+   - [ ] `POST /api/v1/commands/execute`: structured `{command, slots, actor}` → `{ok, data}`, no customer prose.
+   - [ ] `booking.list_services` + filterable `booking.get_availability` (service + date window + time-of-day, ≤5, future, not taken).
+   - [ ] Prove every command via direct API calls (no LLM) — see DoD P1 exit tests.
+2. **Phase 2 — LLM concierge** (in `chatiq`): tool loop on pilot bot; policy prompt + today/timezone context; smoke EN/TH/ZH + narrowing + next-month. See DoD P2.
+3. **Phase 3 — Admin doors**: console (calendar/table, command buttons, ⌘K, commands reference, audit) → copilot with confirm-cards. See DoD P3.
+4. Parallel/later — widen `BOOKING_SIBLING_BOT_IDS` per added bot (smoke each); WS-D code archive of legacy engine (docs already archived 2026-10-21); WS-C identity connect-link; payments.
 
-**Minor known quirk (not blocking):** reschedule offer list can include the just-freed original slot (cancel-then-offer). Picking it would rebook the same time. Consider excluding the original `starts_at` from the reschedule offer later.
+**Minor known quirk (not blocking):** reschedule offer list can include the just-freed original slot (cancel-then-offer). Picking it would rebook the same time. Consider excluding the original `starts_at` from the reschedule offer later (or handle in LLM offer rendering in Phase 2).
 
 **Already done (do not redo):**
 - Deploy: https://chatiq-booking.vercel.app/ — health `persistence: "supabase"`.
@@ -36,18 +41,54 @@ Owner: Engineering
 | **Legacy** | Archive/tag old in-`chatiq` engine; mine docs, do not import runtime |
 | **Rollout** | `BOOKING_SIBLING_BOT_IDS` allowlist for pilot; widen/clear at release |
 | **Entry UX** | **Intent → typed command library** (not keyword canned as primary). Spec: [`booking-command-library.md`](./booking-command-library.md) |
+| **Interpretation (locked 2026-10-21)** | **LLM interprets (any language) and drives the sibling via one fixed typed command set; sibling is deterministic/monolingual internally and never parses natural language; customer never touches the sibling directly.** Heuristic regexes = fallback/shortcuts only, never extended per-language. Full design: [`booking-command-library.md`](./booking-command-library.md) |
+| **Admin (locked 2026-10-21)** | Same command bus, three interfaces: customer concierge (LLM), admin console (direct UI), admin copilot (LLM + human confirm-cards). Actor scope + audit on every command. |
 
 ## 1) Why
 
 In-process booking in `chatiq` coupled core chat to a large engine. Extract to a sibling so trial-and-error cannot regress chat.
 
-## 2) Definition of Done (v1 skeleton → pilot)
+## 2) Definition of Done
 
-1. **Isolation** — Booking deploys cannot break core chat; `booking_mode=off` → zero sibling calls.
-2. **Contract** — Health + turn handle v0 documented and implemented.
-3. **Adapter** — ChatIQ calls sibling only when `BOOKING_RUNTIME=sibling` + URL/token + `booking_mode=full`; fail closed on error/timeout.
-4. **Pilot slice** — One bookable happy-path + minimal admin (after Supabase). **Done.**
-5. **Legacy** — Old engine tagged/archived off hot paths when sibling path is ready for a pilot bot.
+### Already met (pilot foundation — do not redo)
+
+1. **Isolation** — Booking deploys cannot break core chat; `booking_mode=off` → zero sibling calls. ✅
+2. **Contract** — Health + turn handle v0 documented and implemented. ✅
+3. **Adapter** — ChatIQ calls sibling only when `BOOKING_RUNTIME=sibling` + URL/token + `booking_mode=full`; fail closed on error/timeout. ✅
+4. **Pilot slice** — Bookable happy-path + minimal admin on Supabase; create/lookup/clarify/cancel/reschedule chat-smoked (EN). ✅ 2026-10-21
+
+### Phase 1 — Tool-ready deterministic sibling (`chatiq-booking`)
+
+Done when **every command can be executed and verified via direct API calls with no LLM in the loop**:
+
+- [x] Past bookings are never treated as upcoming (`starts_at >= now` in `getLatestOpenBooking`) — 2026-10-21
+- [ ] `POST /api/v1/commands/execute` returns structured data (no customer-facing prose) for: `list_services`, `get_existing`, `get_availability`, `create`, `cancel`, `reschedule`
+- [ ] `get_availability` filters by service + date window + optional time-of-day; returns ≤ 5 slots, all future, none taken
+- [ ] Mutations validate server-side: slot still open, booking exists & upcoming, cancel/reschedule require `confirmed=true`
+- [ ] API exit tests pass: create→lookup→reschedule→cancel happy path; double-book same slot rejected; past booking invisible to lookup/cancel; availability window with no slots returns empty (not an error)
+
+### Phase 2 — LLM concierge (`chatiq`)
+
+Done when **a customer can complete the full booking lifecycle in their own language, with the LLM only ever calling sibling commands**:
+
+- [ ] Booking tools registered only for `booking_mode=full` + allowlisted bots; sibling remains unreachable otherwise
+- [ ] Policy prompt live: never invent slots/services; confirm before mutating; reply in customer's language; today + timezone injected
+- [ ] Narrowing works: service → week → day → time-of-day, skipping already-stated info; ≤ 5 slots offered; "more" re-queries next window
+- [ ] Smoke passes (pilot bot): English, Thai, and Chinese full flows (book / check / cancel / reschedule); "next month" request resolves to a future window; LLM offers only sibling-returned slots
+- [ ] Fail-closed preserved: sibling down → no booking action, core chat continues
+
+### Phase 3 — Admin doors (same command bus)
+
+Done when **human agents can run the same operations directly and via natural language, with accountability**:
+
+- [ ] `/admin` console: calendar + table views, booking detail with command buttons (reschedule/cancel/no-show/create-on-behalf), filters
+- [ ] Commands reference page + ⌘K palette listing every command, inputs, and who may run it
+- [ ] Actor scope enforced (customer=own, provider=own calendar, agent=team) and every mutation audit-logged (actor, via UI/LLM, before→after)
+- [ ] Admin copilot: NL → proposed command card → human Confirm/Edit/Dismiss; read-only NL queries answered from command results; admin changes notify the customer in their language via ChatIQ
+
+### Overall v1 DoD
+
+Phases 1–2 complete on the pilot bot + Phase 3 console (copilot may trail). Legacy in-`chatiq` booking docs archived (done 2026-10-21); legacy code tagged `pre-booking-sibling-archive` and off hot paths (WS-D).
 
 ## 3) Workstreams
 
@@ -77,10 +118,11 @@ In-process booking in `chatiq` coupled core chat to a large engine. Extract to a
 
 ### WS-D — Archive legacy
 
-- [ ] Inventory + git tag `pre-booking-sibling-archive`
-- [ ] Remove old engine from hot paths; keep docs as legacy reference
+- [x] **Docs:** legacy in-`chatiq` booking docs archived 2026-10-21 (`chatiq/dev_docs/booking-system/_archive/2026-legacy-engine/`, 32 files; index in `booking-system/README.md`) — superseded, do not follow
+- [ ] Code: git tag `pre-booking-sibling-archive` in `chatiq`
+- [ ] Code: remove old engine from hot paths (docs stay as legacy reference)
 
-### WS-E — Intent → command library
+### WS-E — Intent → command library (v0, heuristic — superseded direction)
 
 - [x] Spec + roadmap: [`booking-command-library.md`](./booking-command-library.md)
 - [x] Extend turn API with optional `command` + `slots` + `confidence`
@@ -88,6 +130,28 @@ In-process booking in `chatiq` coupled core chat to a large engine. Extract to a
 - [x] ChatIQ: heuristic select command before calling sibling
 - [x] Map canned `booking_start` / `booking_command` → sibling command IDs
 - [x] `booking.lookup` + `booking.clarify` + cancel confirm + reschedule
+- Note: heuristics now **fallback/shortcuts only** under the locked LLM-concierge design; do not extend them per-language.
+
+### WS-F — Phase 1: tool-ready sibling (NEXT)
+
+- [x] Past-booking bug fix (`starts_at >= now`)
+- [ ] `POST /api/v1/commands/execute` (structured in/out, actor context)
+- [ ] `booking.list_services`; filterable `booking.get_availability` (window, time-of-day, ≤5)
+- [ ] Server-side mutation validation (`confirmed=true`, future/open checks)
+- [ ] API exit tests (no LLM): happy path, double-book, past-booking invisibility, empty window
+
+### WS-G — Phase 2: LLM concierge (ChatIQ)
+
+- [ ] Register booking tools only on gated bots; policy prompt + today/timezone injection
+- [ ] Tool loop calls sibling commands/execute; LLM renders replies in customer language
+- [ ] Narrowing + "more" pagination via re-query
+- [ ] Smoke: EN / TH / ZH full flows + next-month + returned-slots-only
+
+### WS-H — Phase 3: admin doors
+
+- [ ] `/admin` console: calendar/table, detail command buttons, filters
+- [ ] Commands reference + ⌘K palette; actor scopes; audit log
+- [ ] Copilot: NL → confirm-card → execute; customer notification on admin changes
 
 ## 4) Progress Log
 
@@ -137,6 +201,26 @@ chatiq-booking: [#################___] ~85% -> DoD
 ```
 
 **Next:** chat-smoke cancel/reschedule; later widen allowlist / archive legacy / LLM tool select.
+
+### 2026-10-21 — Design locked: LLM concierge; Phase 1 started; legacy docs archived
+
+**Decided (with user)**
+- LLM interprets in any language and drives the sibling via one fixed typed command set; sibling stays deterministic/monolingual, never parses NL; customer never touches the sibling directly. Heuristics demoted to fallback/shortcuts.
+- Narrowing by conversation (service → week → day → time-of-day), ~7-day search windows, ≤5 slots.
+- Admins: same command bus via console (direct) + copilot (NL with human confirm-cards); actor scope + audit.
+- Full design: [`booking-command-library.md`](./booking-command-library.md) (rewritten); DoD restructured into Phase 1/2/3 exit criteria (§2).
+
+**Changed**
+- Bug fix: `getLatestOpenBooking` requires `starts_at >= now` and returns the next upcoming booking (past 20 Oct booking was treated as current in smoke). Typecheck ✅. Live re-smoke pending next deploy.
+- Docs: legacy `chatiq/dev_docs/booking-system/*` (32 files) archived to `_archive/2026-legacy-engine/` with a superseded index README; active pointers updated (`_active-focus`, `mission-lifecycle`, workspace `ROADMAP`/`AGENTS`).
+
+**Approx. toward DoD:** pilot foundation ✅; **Phase 1 ~15%** (bug fix done, commands/execute next).
+
+```text
+chatiq-booking: [##################__] ~90% -> pilot foundation DoD | Phase 1 (tool-ready): ~15%
+```
+
+**Next:** `POST /api/v1/commands/execute` + `list_services` + filterable `get_availability`, then API exit tests.
 
 ### 2026-10-21 — Chat-smoke cancel + reschedule ✅
 

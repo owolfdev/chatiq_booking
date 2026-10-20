@@ -2,7 +2,9 @@
 
 Service-to-service JSON over HTTPS. Auth: `Authorization: Bearer <shared token>`.
 
-Product direction: **intent → typed booking commands**. See [`booking-command-library.md`](./booking-command-library.md).
+Product direction (locked 2026-10-21): **LLM interprets → typed booking commands → deterministic sibling**. See [`booking-command-library.md`](./booking-command-library.md).
+
+> **Status:** this v0 turn contract is the live pilot contract and stays as fallback/API-smoke path. Phase 1 adds `POST /api/v1/commands/execute` (structured data in/out, no customer prose) for the ChatIQ LLM tool loop — update this doc when it lands.
 
 ## `GET /api/health`
 

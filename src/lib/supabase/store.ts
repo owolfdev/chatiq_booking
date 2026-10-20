@@ -273,6 +273,12 @@ export type DbBooking = {
   catalog_item_id: string | null;
 };
 
+/**
+ * The contact's next upcoming open booking.
+ * Must filter `starts_at >= now`: without it, a past confirmed booking is
+ * treated as current (blocks create, shows in lookup, offered for cancel).
+ * Found in chat-smoke 2026-10-21 (expired 20 Oct booking still "upcoming").
+ */
 export async function getLatestOpenBooking(input: {
   team_id: string;
   bot_id: string;
@@ -287,7 +293,8 @@ export async function getLatestOpenBooking(input: {
     .eq("bot_id", input.bot_id)
     .eq("contact_id", input.contact_id)
     .in("status", ["pending", "confirmed"])
-    .order("created_at", { ascending: false })
+    .gte("starts_at", new Date().toISOString())
+    .order("starts_at", { ascending: true })
     .limit(1)
     .maybeSingle();
   if (error) {

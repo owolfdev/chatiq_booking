@@ -1,8 +1,13 @@
 # chatiq-booking docs
 
+**Start here — the only active booking roadmap in the workspace:**
+
 | Doc | Role |
 |-----|------|
-| [`_mission-booking-sibling-v1.md`](./_mission-booking-sibling-v1.md) | Primary mission, DoD, Progress Log |
-| [`api-contract-v0.md`](./api-contract-v0.md) | Turn + health HTTP contract |
+| [`_mission-booking-sibling-v1.md`](./_mission-booking-sibling-v1.md) | **Primary mission: roadmap, DoD (Phase 1/2/3), Resume here, Progress Log** |
+| [`booking-command-library.md`](./booking-command-library.md) | **Locked design (2026-10-21): LLM concierge → deterministic commands; tool catalog; narrowing; admin doors** |
+| [`api-contract-v0.md`](./api-contract-v0.md) | Current v0 turn + health HTTP contract (pilot; v1 commands API planned in Phase 1) |
+| [`supabase-setup.md`](./supabase-setup.md) | Supabase provisioning/migrations |
 
-Legacy booking specs (reference only) live in `chatiq/dev_docs/booking-system/`.
+Legacy in-`chatiq` booking docs are **archived and superseded** — do not follow them:
+`chatiq/dev_docs/booking-system/_archive/2026-legacy-engine/` (index: `chatiq/dev_docs/booking-system/README.md`).

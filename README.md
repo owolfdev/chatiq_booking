@@ -27,7 +27,7 @@ npm run dev   # http://localhost:3003
 
 ## ChatIQ adapter (chat path wired)
 
-**Next production-pilot step:** point ChatIQ at the deployed sibling with one allowlisted bot. Full checklist: [`dev_docs/_mission-booking-sibling-v1.md`](./dev_docs/_mission-booking-sibling-v1.md) (**Resume here**).
+Pilot is live: ChatIQ points at the deployed sibling with one allowlisted bot, and create/lookup/cancel/reschedule are chat-smoked. **Design locked (2026-10-21): LLM concierge drives the deterministic sibling via typed commands** — see [`dev_docs/booking-command-library.md`](./dev_docs/booking-command-library.md). Next steps: [`dev_docs/_mission-booking-sibling-v1.md`](./dev_docs/_mission-booking-sibling-v1.md) (**Resume here**).
 
 In `chatiq` `.env.local` (or Vercel):
 
