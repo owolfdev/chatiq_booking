@@ -1,7 +1,7 @@
 # Mission: Booking sibling v1 (`chatiq-booking`)
 
 Last updated: 2026-10-21  
-Status: **In progress** — deterministic pilot **chat-smoked ✅**; design **locked: LLM concierge → deterministic commands** (see [`booking-command-library.md`](./booking-command-library.md)). Now **Phase 1: tool-ready sibling**.  
+Status: **In progress** — **Phase 1 ✅ + Phase 2 ✅** (LLM concierge live-smoked EN/TH/ZH). Next: **Phase 3 — admin doors**. Design: [`booking-command-library.md`](./booking-command-library.md).  
 Owner: Engineering
 
 ## Resume here (next session)
@@ -9,8 +9,8 @@ Owner: Engineering
 **The one roadmap is this file (§2 DoD + §3 workstreams). Do this next, in order:**
 
 1. ~~**Phase 1 — Tool-ready sibling**~~ ✅ **DONE 2026-10-21** (see WS-F; smoke 20/20 locally + on Vercel).
-2. **Phase 2 — LLM concierge** (in `chatiq`): tool loop on pilot bot; policy prompt + today/timezone context; smoke EN/TH/ZH + narrowing + next-month. See DoD P2. **← START HERE**
-3. **Phase 3 — Admin doors**: console (calendar/table, command buttons, ⌘K, commands reference, audit) → copilot with confirm-cards. See DoD P3.
+2. ~~**Phase 2 — LLM concierge**~~ ✅ **DONE 2026-10-21** (live-smoked EN/TH/ZH, see Progress Log). Enabled by `BOOKING_CONCIERGE=llm` (set in local `chatiq/.env.local`; add to Vercel env when deploying concierge to prod chat).
+3. **Phase 3 — Admin doors** (NEXT): console (calendar/table, command buttons, ⌘K, commands reference, audit) → copilot with confirm-cards. See DoD P3. **← START HERE**
 4. Parallel/later — widen `BOOKING_SIBLING_BOT_IDS` per added bot (smoke each); WS-D code archive of legacy engine (docs already archived 2026-10-21); WS-C identity connect-link; payments.
 
 **Minor known quirk (not blocking):** reschedule offer list can include the just-freed original slot (cancel-then-offer). Picking it would rebook the same time. Consider excluding the original `starts_at` from the reschedule offer later (or handle in LLM offer rendering in Phase 2).
@@ -67,11 +67,11 @@ Done when **every command can be executed and verified via direct API calls with
 
 Done when **a customer can complete the full booking lifecycle in their own language, with the LLM only ever calling sibling commands**:
 
-- [ ] Booking tools registered only for `booking_mode=full` + allowlisted bots; sibling remains unreachable otherwise
-- [ ] Policy prompt live: never invent slots/services; confirm before mutating; reply in customer's language; today + timezone injected
-- [ ] Narrowing works: service → week → day → time-of-day, skipping already-stated info; ≤ 5 slots offered; "more" re-queries next window
-- [ ] Smoke passes (pilot bot): English, Thai, and Chinese full flows (book / check / cancel / reschedule); "next month" request resolves to a future window; LLM offers only sibling-returned slots
-- [ ] Fail-closed preserved: sibling down → no booking action, core chat continues
+- [x] Booking tools registered only for `booking_mode=full` + allowlisted bots (+ `BOOKING_CONCIERGE=llm`); sibling remains unreachable otherwise
+- [x] Policy prompt live: never invent slots/services; confirm before mutating; reply in customer's language; today + timezone injected
+- [x] Narrowing implemented: service → week → day → time-of-day, skipping already-stated info; ≤ 3 slots offered; "more" re-queries next window (live verification in smoke below)
+- [x] Smoke passes (pilot bot) 2026-10-21: EN conversational narrowing (service→week→day→morning→booked, DB-verified); TH lookup + cancel (`ใช่` executed first try); ZH next-month create (Fri 6 Nov 10:00 confirmed) + lookup; cancel confirmation enforced; mid-thread language switch enforced (script detection + rewrite)
+- [x] Fail-closed preserved: concierge failure → deterministic sibling turn; sibling down → no booking action, core chat continues
 
 ### Phase 3 — Admin doors (same command bus)
 
@@ -138,10 +138,10 @@ Phases 1–2 complete on the pilot bot + Phase 3 console (copilot may trail). Le
 
 ### WS-G — Phase 2: LLM concierge (ChatIQ)
 
-- [ ] Register booking tools only on gated bots; policy prompt + today/timezone injection
-- [ ] Tool loop calls sibling commands/execute; LLM renders replies in customer language
-- [ ] Narrowing + "more" pagination via re-query
-- [ ] Smoke: EN / TH / ZH full flows + next-month + returned-slots-only
+- [x] Register booking tools only on gated bots (`BOOKING_CONCIERGE=llm` + sibling gates); policy prompt + today/timezone injection (`chatiq/src/lib/booking-sibling/concierge.ts`)
+- [x] Tool loop calls sibling `commands/execute`; LLM renders replies in customer language; failure → deterministic sibling fallback
+- [x] Narrowing + "more" pagination via re-query (prompt policy: ≤7-day windows, ≤3 offered)
+- [x] Smoke: EN / TH / ZH full flows + next-month + returned-slots-only (2026-10-21, DB-verified)
 
 ### WS-H — Phase 3: admin doors
 
@@ -197,6 +197,46 @@ chatiq-booking: [#################___] ~85% -> DoD
 ```
 
 **Next:** chat-smoke cancel/reschedule; later widen allowlist / archive legacy / LLM tool select.
+
+### 2026-10-21 — Phase 2 smoke ✅ (EN/TH/ZH) — Phase 2 DONE
+
+**Live smoke (pilot bot, local ChatIQ → Vercel sibling; all DB-verified)**
+- EN: cancel-with-confirmation (after fix below), conversational narrowing service→this/next week→day→morning→booked Thu 22 Oct 10:00 (`f00b5413`, later cancelled in TH flow); one-shot "Thursday morning" respected.
+- TH: lookup + cancel in Thai; `ใช่` executed first try; post-cancel lookup correct.
+- ZH: "下个月" narrowed inside November; first-Friday-morning → Fri 6 Nov 10:00 booked (`ef81b867` confirmed); ZH lookup answered about it.
+- Only sibling-returned slots were ever offered.
+
+**Issues found in smoke → fixed same day**
+1. **Confirmation loop**: LLM re-asked "confirm yes" instead of executing. Fix: prompt rule — an affirmative reply to its own confirmation question must execute same-turn (`confirmed=true`); verified by tool log + DB.
+2. **Presumptive rebook offer** after cancel. Fix: rule 9 — offer rebook only if intent expressed earlier; otherwise neutral close.
+3. **Slot-dump before narrowing**. Fix: rule 2 — narrow conversationally first (week→day→time-of-day), search only with a day/window or "soonest"; summarize day-part availability before exact times.
+4. **Language lag on mid-thread switch** (TH history anchored replies). Prompt fix alone insufficient (log proved model still drafted Thai). Fix: script-based latest-message detection (`Reply ONLY in …`) **plus deterministic reply-language enforcement** — reply script mismatch → rewrite before delivery. Log line `reply language mismatch (want Chinese); rewriting` confirmed firing; ZH reply then delivered.
+5. Replies now report `response_source: "llm"` (was misleadingly "deterministic").
+
+**Phase 2 DoD met.** Remaining: nothing for P2. Next: Phase 3 admin doors (WS-H).
+
+```text
+chatiq: Phase 2 (LLM concierge): [####################] 100%
+```
+
+### 2026-10-21 — Phase 2 built: LLM concierge in ChatIQ (awaiting live smoke)
+
+**Changed (`chatiq`)**
+- `src/lib/booking-sibling/concierge.ts`: OpenAI tool loop (model `gpt-4.1-mini`, `BOOKING_CONCIERGE_MODEL` override) with 6 tools mapped to sibling commands; policy prompt (today/tz injected, reply in customer's language, never invent slots, confirm before mutate, ≤7-day narrowing windows).
+- `adapter.ts`: `callBookingSiblingCommand` → `POST /api/v1/commands/execute`. `env.ts`: `BOOKING_CONCIERGE=llm` gate (default off).
+- Chat wiring: concierge tried first on sibling-active bots; **any failure falls back to the deterministic sibling turn**. Telemetry `route_reason=concierge_turn_ok`, `booking_concierge=true`.
+- Local env: `BOOKING_CONCIERGE=llm` appended to `chatiq/.env.local` (restart required).
+
+**Verified**
+- `tests/booking-sibling-concierge.test.ts` + sibling suites: **24/24 pass** (gates, prompt, tool loop, error-feedback, confirmation-error path). `npm run typecheck` ✅.
+
+**Approx. toward DoD:** Phase 2 **~70%** — live EN/TH/ZH smoke outstanding.
+
+```text
+chatiq: Phase 2 (LLM concierge): [##############______] ~70%
+```
+
+**Next:** restart ChatIQ dev server → smoke pilot bot per Resume-here script (EN narrowing, TH, ZH, next-month, cancel-confirm) → mark DoD P2.
 
 ### 2026-10-21 — Phase 1: tool-ready sibling (commands API + exit smoke)
 
