@@ -92,18 +92,27 @@ Goal: never dump dozens of slots; never interrogate either.
 
 Actor context on every command: `actor_type` (customer/agent/provider/admin), `actor_id`, `team_id`, scope. Customers: own contact only. Providers: own calendar. Agents: team-wide. If the LLM layer is down, the admin console still runs the business deterministically — the console is the fallback and the audit surface.
 
-## 6) Contract evolution
+## 6) Identity & account linking (Phase 3a)
+
+Full spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md). Summary:
+
+- Every channel account (web login, LINE user ID) is a legitimate first-class account; bookings belong to the **customer**, channel accounts are keys in `identity_bindings`.
+- A customer at the "wrong" door is linked, never matched by claimed attributes: **merge only on proof of control of both accounts** — `booking.create_connect_token` (hashed, one-time, 10-min) → fresh login + consent screen at the other door → `booking.redeem_connect_token` runs the internal, deterministic `booking.merge_contacts` (fixed survivor rule, tombstone, audit) → notification to both channels.
+- `booking.get_customer` exposes a customer's channel accounts to themselves and to staff (admin detail/unmerge in Phase 3b).
+- The concierge may offer and guide the ceremony with zero existence disclosure pre-merge; it never executes `merge_contacts` directly.
+
+## 7) Contract evolution
 
 - **v0 (today, pilot):** `POST /api/v1/turns/handle` — ChatIQ sends raw `message_text` + optional pre-selected `command`; sibling classifies (English heuristics) and returns English `reply_text`. Proven in pilot; now frozen as fallback/API-smoke path.
 - **v1 (Phase 1–2):** `POST /api/v1/commands/execute` — `{ command, slots, actor, identity_claims, timezone }` → structured `{ ok, data }`, no prose. **Landed in Phase 1** (see `api-contract-v0.md`); the ChatIQ LLM tool loop (Phase 2) will call this. Heuristic classifiers (both repos) demote to: canned/button shortcuts + session continuation (`1/2/3`, confirm steps) + v0 fallback. They are **not** extended to new languages.
 
-## 7) Explicit non-goals (v1)
+## 8) Explicit non-goals (v1)
 
 - Sibling-side natural-language parsing, per-language regex/phrase tables.
 - Payments, external calendar sync, waitlists, multi-provider optimization.
 - Admin copilot executing mutations without a human confirm click.
 
-## 8) Roadmap
+## 9) Roadmap
 
 Phases and exit criteria live in the mission DoD:
 [`_mission-booking-sibling-v1.md`](./_mission-booking-sibling-v1.md) §2–§3.

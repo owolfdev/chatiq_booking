@@ -1,7 +1,7 @@
 # Mission: Booking sibling v1 (`chatiq-booking`)
 
-Last updated: 2026-10-21  
-Status: **In progress** — **Phase 1 ✅ + Phase 2 ✅** (LLM concierge live-smoked EN/TH/ZH). Next: **Phase 3 — admin doors**. Design: [`booking-command-library.md`](./booking-command-library.md).  
+Last updated: 2026-10-21 (EOD handoff)  
+Status: **In progress** — **Phase 1 ✅ + Phase 2 ✅** (LLM concierge live-smoked EN/TH/ZH). Next: **Phase 3a — Identity & account linking (LINE ↔ web)**, then 3b admin doors. Design: [`booking-command-library.md`](./booking-command-library.md) · Identity spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md).  
 Owner: Engineering
 
 ## Resume here (next session)
@@ -10,8 +10,12 @@ Owner: Engineering
 
 1. ~~**Phase 1 — Tool-ready sibling**~~ ✅ **DONE 2026-10-21** (see WS-F; smoke 20/20 locally + on Vercel).
 2. ~~**Phase 2 — LLM concierge**~~ ✅ **DONE 2026-10-21** (live-smoked EN/TH/ZH, see Progress Log). Enabled by `BOOKING_CONCIERGE=llm` (set in local `chatiq/.env.local`; add to Vercel env when deploying concierge to prod chat).
-3. **Phase 3 — Admin doors** (NEXT): console (calendar/table, command buttons, ⌘K, commands reference, audit) → copilot with confirm-cards. See DoD P3. **← START HERE**
-4. Parallel/later — widen `BOOKING_SIBLING_BOT_IDS` per added bot (smoke each); WS-D code archive of legacy engine (docs already archived 2026-10-21); WS-C identity connect-link; payments.
+3. **Phase 3a — Identity & account linking** (NEXT) **← START HERE.** Full spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md).
+   - Migration: `connect_tokens`, `identity_audit_log`, `contacts.merged_into`.
+   - Sibling commands: `booking.create_connect_token`, `booking.redeem_connect_token` (runs internal `merge_contacts`), `booking.get_customer`.
+   - API exit tests (no LLM), then channel smokes: LINE persistence → LINE→web link → web→LINE code → post-merge lookup from both doors. See DoD Phase 3a.
+4. **Phase 3b — Admin doors**: console (calendar/table, command buttons, ⌘K, commands reference, audit incl. identity audit + unmerge) → copilot with confirm-cards. See DoD Phase 3b.
+5. Parallel/later — widen `BOOKING_SIBLING_BOT_IDS` per added bot (smoke each); WS-D code archive of legacy engine (docs already archived 2026-10-21); payments; add `BOOKING_CONCIERGE=llm` to ChatIQ Vercel env when concierge goes to prod.
 
 **Minor known quirk (not blocking):** reschedule offer list can include the just-freed original slot (cancel-then-offer). Picking it would rebook the same time. Consider excluding the original `starts_at` from the reschedule offer later (or handle in LLM offer rendering in Phase 2).
 
@@ -33,7 +37,8 @@ Owner: Engineering
 | **Deploy** | https://chatiq-booking.vercel.app/ |
 | **DB** | Dedicated Supabase `crxwmkegmrusndpocntu` |
 | **Timezone** | Store timestamptz; pilot labels **Asia/Bangkok** |
-| **Contacts** | Booking-owned `contacts` + `identity_bindings`; connect-link later |
+| **Contacts** | Booking-owned `contacts` + `identity_bindings`; connect-link in Phase 3a |
+| **Identity (locked 2026-10-21)** | **Every channel account (web login, LINE user ID) is a legitimate first-class customer account; bookings belong to the customer, channel accounts are keys. Merge only on proof of control of BOTH accounts in one ceremony (one-time token + consent + both-channel notification); never merge on claimed name/phone/email.** Spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md) |
 | **Legacy** | Archive/tag old in-`chatiq` engine; mine docs, do not import runtime |
 | **Rollout** | `BOOKING_SIBLING_BOT_IDS` allowlist for pilot; widen/clear at release |
 | **Entry UX** | **Intent → typed command library** (not keyword canned as primary). Spec: [`booking-command-library.md`](./booking-command-library.md) |
@@ -73,18 +78,29 @@ Done when **a customer can complete the full booking lifecycle in their own lang
 - [x] Smoke passes (pilot bot) 2026-10-21: EN conversational narrowing (service→week→day→morning→booked, DB-verified); TH lookup + cancel (`ใช่` executed first try); ZH next-month create (Fri 6 Nov 10:00 confirmed) + lookup; cancel confirmation enforced; mid-thread language switch enforced (script detection + rewrite)
 - [x] Fail-closed preserved: concierge failure → deterministic sibling turn; sibling down → no booking action, core chat continues
 
-### Phase 3 — Admin doors (same command bus)
+### Phase 3a — Identity & account linking (LINE ↔ web) — NEXT
+
+Spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md). Done when **a customer who booked at one door is recognized at the other after a secure link**:
+
+- [ ] Migration: `connect_tokens` (hashed, one-time, 10-min), `identity_audit_log`, `contacts.merged_into`/status
+- [ ] `booking.create_connect_token` / `booking.redeem_connect_token` / `booking.get_customer`; merge is internal-only, deterministic survivor rule, tombstone + audit, `MERGE_CONFLICT` aborts safely
+- [ ] API exit tests (no LLM): happy-path merge unifies bookings from both sides; expired/reused/wrong-team token rejected; third-customer binding → conflict, nothing merged
+- [ ] Channel smokes: LINE persistence (new conversation finds booking); LINE→web link (consent screen, fresh login); web→LINE short-code redemption in chat; post-merge lookup from **both** doors; both-channel "accounts linked" notification
+- [ ] Concierge offers linking with **zero existence disclosure** pre-merge (EN/TH at minimum)
+- [ ] Contact enrichment: LINE display-name snapshot; web name/email copied at redemption (display only)
+
+### Phase 3b — Admin doors (same command bus)
 
 Done when **human agents can run the same operations directly and via natural language, with accountability**:
 
-- [ ] `/admin` console: calendar + table views, booking detail with command buttons (reschedule/cancel/no-show/create-on-behalf), filters
+- [ ] `/admin` console: calendar + table views, booking detail with command buttons (reschedule/cancel/no-show/create-on-behalf), filters; customer detail shows channel accounts + identity audit, with admin unmerge
 - [ ] Commands reference page + ⌘K palette listing every command, inputs, and who may run it
 - [ ] Actor scope enforced (customer=own, provider=own calendar, agent=team) and every mutation audit-logged (actor, via UI/LLM, before→after)
 - [ ] Admin copilot: NL → proposed command card → human Confirm/Edit/Dismiss; read-only NL queries answered from command results; admin changes notify the customer in their language via ChatIQ
 
 ### Overall v1 DoD
 
-Phases 1–2 complete on the pilot bot + Phase 3 console (copilot may trail). Legacy in-`chatiq` booking docs archived (done 2026-10-21); legacy code tagged `pre-booking-sibling-archive` and off hot paths (WS-D).
+Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b console (copilot may trail). Legacy in-`chatiq` booking docs archived (done 2026-10-21); legacy code tagged `pre-booking-sibling-archive` and off hot paths (WS-D).
 
 ## 3) Workstreams
 
@@ -106,11 +122,15 @@ Phases 1–2 complete on the pilot bot + Phase 3 console (copilot may trail). Le
 - [x] Minimal admin schedule (`/admin`)
 - [x] Slot uniqueness / conflict handling
 
-### WS-C — Identity (phased)
+### WS-C — Identity & account linking (= Phase 3a; spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md))
 
-- [ ] Resolve by conversation/LINE binding
-- [ ] Connect-link chat → web/app login
-- [ ] Soft verified email/phone merge; admin merge
+- [x] Resolve by conversation/LINE binding (claims → contact; LINE path untested on real LINE bot)
+- [ ] Migration: `connect_tokens`, `identity_audit_log`, `contacts.merged_into`
+- [ ] Connect token issue/redeem + internal merge (survivor rule, tombstone, audit, conflict abort)
+- [ ] `booking.get_customer`; contact enrichment (LINE display name, web profile at redemption)
+- [ ] API exit tests (token lifecycle, merge unification, conflict)
+- [ ] Channel smokes: LINE persistence; LINE→web; web→LINE code; post-merge both-door lookup + notifications
+- [ ] Concierge linking conversation (no existence disclosure); admin unmerge lands in WS-H
 
 ### WS-D — Archive legacy
 
@@ -143,13 +163,35 @@ Phases 1–2 complete on the pilot bot + Phase 3 console (copilot may trail). Le
 - [x] Narrowing + "more" pagination via re-query (prompt policy: ≤7-day windows, ≤3 offered)
 - [x] Smoke: EN / TH / ZH full flows + next-month + returned-slots-only (2026-10-21, DB-verified)
 
-### WS-H — Phase 3: admin doors
+### WS-H — Phase 3b: admin doors
 
-- [ ] `/admin` console: calendar/table, detail command buttons, filters
+- [ ] `/admin` console: calendar/table, detail command buttons, filters; customer detail (channel accounts, identity audit, unmerge)
 - [ ] Commands reference + ⌘K palette; actor scopes; audit log
 - [ ] Copilot: NL → confirm-card → execute; customer notification on admin changes
 
 ## 4) Progress Log
+
+### 2026-10-21 — EOD handoff: identity (Phase 3a) designed & documented; pickup tomorrow
+
+**Discussed & locked (with user; no code today)**
+- Every channel account (web login / LINE user ID) is a legitimate first-class customer account; bookings belong to the **customer**, channel accounts are keys. Linking is additive.
+- Merge only on **proof of control of both accounts** in one ceremony (industry-standard account linking): one-time hashed token (10-min), fresh login at redemption, explicit consent screen, merge → notify **both** channels. **Never** merge on claimed name/phone/email; no existence disclosure pre-merge.
+- Deterministic sibling owns token/merge/audit; LLM/concierge guides; staff trigger but never bypass proof; unmerge is admin-only.
+- Full spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md) (principles, honest current-status table, ceremony, merge semantics, commands, exit tests, deferred items).
+
+**Doc changes**
+- Mission: Resume-here now starts at **Phase 3a**; DoD split Phase 3 → **3a Identity** + **3b Admin doors**; WS-C rewritten as Phase 3a checklist; identity added to locked decisions.
+- Design doc [`booking-command-library.md`](./booking-command-library.md): identity section + commands.
+- Workspace `ROADMAP.md` / `AGENTS.md` and `chatiq/dev_docs/_active-focus.md` repointed to Phase 3a.
+
+**State at EOD:** Phase 1 ✅, Phase 2 ✅ (concierge committed `db327c43` / `98140fc`, live-smoked EN/TH/ZH). Phase 3a **0% built, 100% specified**.
+
+```text
+chatiq-booking: Phase 3a (identity):  [____________________] 0% built -> DoD (spec complete)
+chatiq:         Phase 3a support:     [____________________] 0% (LINE smoke + consent surface later)
+```
+
+**Tomorrow first action:** Phase 3a step 1 — Supabase migration (`connect_tokens`, `identity_audit_log`, `contacts.merged_into`) in `chatiq-booking`, then token/merge commands. Prereq check: a LINE-connected bot is needed for the LINE smokes later in 3a (API exit tests need no LINE).
 
 ### 2026-10-19 — Pilot create verified + docs catch-up
 
