@@ -171,6 +171,24 @@ Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b console (c
 
 ## 4) Progress Log
 
+### 2026-10-23 — Phase 3a sibling core pushed + deployed smokes green
+
+**Shipped**
+- `chatiq-booking` `a7248f4` `Add identity linking: connect tokens and contact merge (Phase 3a)` — pushed to `main`.
+- `chatiq` `0c460fba` `Add human docs for booking assistant, identity, and admins` — pushed to `main`.
+
+**Verified (deployed, Vercel prod)**
+- `BOOKING_SMOKE_BASE_URL=https://chatiq-booking.vercel.app npm run smoke:identity` → **PASS** (all 16 checks on prod).
+- Same base `npm run smoke:commands` → **PASS** (booking lifecycle regression on prod).
+
+**Approx. toward DoD:** Phase 3a **~60%** (sibling core done + deployed-proven; channel smokes + concierge/admin surfaces + enrichment left).
+
+```text
+chatiq-booking: Phase 3a (identity): [############________] ~60%
+```
+
+**Next:** channel smokes need a LINE-connected bot (LINE identity persistence first); concierge linking conversation (offer + code redemption, no existence disclosure, EN/TH); contact enrichment (LINE display name, web profile at redemption); connect consent page (web UI for redemption URL); expired-token smoke variant (backdated token).
+
 ### 2026-10-23 — Phase 3a sibling core built + identity smoke 16/16
 
 **Changed**
