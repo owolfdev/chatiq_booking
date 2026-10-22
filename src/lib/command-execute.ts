@@ -16,6 +16,12 @@ import {
 } from "@/lib/contract";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import {
+  createConnectToken,
+  getCustomerProfile,
+  IdentityError,
+  redeemConnectToken,
+} from "@/lib/supabase/identity";
+import {
   cancelBooking,
   createBooking,
   getBookingById,
@@ -38,6 +44,9 @@ const EXECUTABLE_COMMANDS = new Set([
   "booking.create",
   "booking.cancel",
   "booking.reschedule",
+  "booking.create_connect_token",
+  "booking.redeem_connect_token",
+  "booking.get_customer",
 ]);
 
 type Slots = Record<string, unknown>;
@@ -218,6 +227,69 @@ export async function executeBookingCommand(
       const contact = await getContactById({ team_id, contact_id: contactId });
       if (!contact) {
         return fail(command, "CONTACT_NOT_FOUND", `Unknown contact: ${contactId}`);
+      }
+    }
+
+    if (command === "booking.create_connect_token") {
+      const issued = await createConnectToken({
+        team_id,
+        bot_id,
+        contact_id: contactId,
+      });
+      const urlBase = process.env.BOOKING_CONNECT_URL_BASE?.trim();
+      return ok(command, {
+        contact_id: contactId,
+        token: issued.token,
+        short_code: issued.short_code,
+        expires_at: issued.expires_at,
+        connect_url: urlBase
+          ? `${urlBase.replace(/\/$/, "")}?token=${issued.token}`
+          : null,
+      });
+    }
+
+    if (command === "booking.get_customer") {
+      const profile = await getCustomerProfile({ team_id, bot_id, contact_id: contactId });
+      if (!profile) {
+        return fail(command, "CONTACT_NOT_FOUND", `Unknown contact: ${contactId}`);
+      }
+      return ok(command, {
+        contact: {
+          id: profile.contact.id,
+          name: profile.contact.name,
+          email: profile.contact.email,
+          phone: profile.contact.phone,
+        },
+        bindings: profile.bindings,
+        upcoming_bookings: profile.upcoming_bookings,
+      });
+    }
+
+    if (command === "booking.redeem_connect_token") {
+      const code = str(slots, "code", "token", "connect_code", "short_code");
+      if (!code) {
+        return fail(command, "INVALID_REQUEST", "slots.code (connect token or short code) is required");
+      }
+      try {
+        const redeemed = await redeemConnectToken({
+          team_id,
+          bot_id,
+          code,
+          redeeming_contact_id: contactId,
+          actor_type: actor.type,
+          actor_id: actor.id ?? null,
+        });
+        return ok(command, {
+          contact_id: redeemed.survivor_contact_id,
+          survivor_contact_id: redeemed.survivor_contact_id,
+          merged_contact_id: redeemed.merged_contact_id,
+          already_linked: redeemed.already_linked,
+        });
+      } catch (err) {
+        if (err instanceof IdentityError) {
+          return fail(command, err.code, err.message);
+        }
+        throw err;
       }
     }
 

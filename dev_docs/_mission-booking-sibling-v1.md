@@ -10,10 +10,10 @@ Owner: Engineering
 
 1. ~~**Phase 1 — Tool-ready sibling**~~ ✅ **DONE 2026-10-21** (see WS-F; smoke 20/20 locally + on Vercel).
 2. ~~**Phase 2 — LLM concierge**~~ ✅ **DONE 2026-10-21** (live-smoked EN/TH/ZH, see Progress Log). Enabled by `BOOKING_CONCIERGE=llm` (set in local `chatiq/.env.local`; add to Vercel env when deploying concierge to prod chat).
-3. **Phase 3a — Identity & account linking** (NEXT) **← START HERE.** Full spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md).
-   - Migration: `connect_tokens`, `identity_audit_log`, `contacts.merged_into`.
-   - Sibling commands: `booking.create_connect_token`, `booking.redeem_connect_token` (runs internal `merge_contacts`), `booking.get_customer`.
-   - API exit tests (no LLM), then channel smokes: LINE persistence → LINE→web link → web→LINE code → post-merge lookup from both doors. See DoD Phase 3a.
+3. **Phase 3a — Identity & account linking** — **sibling core DONE 2026-10-23** (migration applied via CLI; identity smoke 16/16). Remaining: channel smokes + concierge/admin surfaces. Full spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md). **← CONTINUE HERE:**
+   - Channel smokes (needs a LINE-connected bot): LINE persistence → LINE→web link consent surface → web→LINE code in chat → post-merge both-door lookup + notifications.
+   - Concierge linking conversation (offer + code redemption, no existence disclosure); contact enrichment (LINE display name, web profile at redemption).
+   - Deployed identity smoke after next push: `BOOKING_SMOKE_BASE_URL=https://chatiq-booking.vercel.app npm run smoke:identity`.
 4. **Phase 3b — Admin doors**: console (calendar/table, command buttons, ⌘K, commands reference, audit incl. identity audit + unmerge) → copilot with confirm-cards. See DoD Phase 3b.
 5. Parallel/later — widen `BOOKING_SIBLING_BOT_IDS` per added bot (smoke each); WS-D code archive of legacy engine (docs already archived 2026-10-21); payments; add `BOOKING_CONCIERGE=llm` to ChatIQ Vercel env when concierge goes to prod.
 
@@ -82,9 +82,9 @@ Done when **a customer can complete the full booking lifecycle in their own lang
 
 Spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md). Done when **a customer who booked at one door is recognized at the other after a secure link**:
 
-- [ ] Migration: `connect_tokens` (hashed, one-time, 10-min), `identity_audit_log`, `contacts.merged_into`/status
-- [ ] `booking.create_connect_token` / `booking.redeem_connect_token` / `booking.get_customer`; merge is internal-only, deterministic survivor rule, tombstone + audit, `MERGE_CONFLICT` aborts safely
-- [ ] API exit tests (no LLM): happy-path merge unifies bookings from both sides; expired/reused/wrong-team token rejected; third-customer binding → conflict, nothing merged
+- [x] Migration: `connect_tokens` (hashed, one-time, 10-min), `identity_audit_log`, `contacts.merged_into`/status — applied 2026-10-23 via Supabase CLI (`db push`)
+- [x] `booking.create_connect_token` / `booking.redeem_connect_token` / `booking.get_customer`; merge is internal-only, deterministic survivor rule, tombstone + audit, `MERGE_CONFLICT` aborts safely
+- [x] API exit tests (no LLM): `npm run smoke:identity` **16/16 locally** — happy-path merge unifies bookings from both sides; wrong code `TOKEN_INVALID`; reuse `TOKEN_USED`. (Expired-token path implemented, not smoke-tested — needs a backdated token.)
 - [ ] Channel smokes: LINE persistence (new conversation finds booking); LINE→web link (consent screen, fresh login); web→LINE short-code redemption in chat; post-merge lookup from **both** doors; both-channel "accounts linked" notification
 - [ ] Concierge offers linking with **zero existence disclosure** pre-merge (EN/TH at minimum)
 - [ ] Contact enrichment: LINE display-name snapshot; web name/email copied at redemption (display only)
@@ -125,10 +125,10 @@ Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b console (c
 ### WS-C — Identity & account linking (= Phase 3a; spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md))
 
 - [x] Resolve by conversation/LINE binding (claims → contact; LINE path untested on real LINE bot)
-- [ ] Migration: `connect_tokens`, `identity_audit_log`, `contacts.merged_into`
-- [ ] Connect token issue/redeem + internal merge (survivor rule, tombstone, audit, conflict abort)
-- [ ] `booking.get_customer`; contact enrichment (LINE display name, web profile at redemption)
-- [ ] API exit tests (token lifecycle, merge unification, conflict)
+- [x] Migration: `connect_tokens`, `identity_audit_log`, `contacts.merged_into` (applied 2026-10-23)
+- [x] Connect token issue/redeem + internal merge (survivor rule, tombstone, audit, conflict abort)
+- [x] `booking.get_customer`; contact enrichment (LINE display name, web profile at redemption) ← enrichment pending
+- [x] API exit tests: `scripts/smoke-identity.mjs` 16/16 locally (commands smoke still green)
 - [ ] Channel smokes: LINE persistence; LINE→web; web→LINE code; post-merge both-door lookup + notifications
 - [ ] Concierge linking conversation (no existence disclosure); admin unmerge lands in WS-H
 
@@ -170,6 +170,27 @@ Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b console (c
 - [ ] Copilot: NL → confirm-card → execute; customer notification on admin changes
 
 ## 4) Progress Log
+
+### 2026-10-23 — Phase 3a sibling core built + identity smoke 16/16
+
+**Changed**
+- Migration `20261023000000_identity_linking.sql` applied via Supabase CLI (`db push`, project linked): `connect_tokens`, `identity_audit_log`, `contacts.merged_into/merged_at`.
+- `src/lib/supabase/identity.ts`: connect-token issue (SHA-256 hashes, one-time, 10-min, supersedes outstanding), redeem (long token or 6-digit code; `TOKEN_INVALID/USED/EXPIRED`), deterministic `mergeContacts` (web-profile survivor else older; bookings/sessions/bindings re-pointed; tombstone; audit; `MERGE_CONFLICT` abort), `getCustomerProfile` (follows merges).
+- Commands: `booking.create_connect_token`, `booking.redeem_connect_token`, `booking.get_customer` on `/api/v1/commands/execute`; contract updated.
+- Fix during smoke: short-code reuse now reports `TOKEN_USED` (lookup keeps consumed token visible, prefers a live one on collision).
+- Human docs in `chatiq`: `/docs/ai-booking-assistant`, `/docs/customer-identity-and-linking`, `/docs/booking-admin-and-teams` (+ docs index Booking category). MDX compile ✅; visible after ChatIQ dev restart.
+
+**Verified**
+- `npm run smoke:identity` (local server, real Supabase): **16/16** — two doors book separately, pre-link isolation, wrong code, token issue/expiry, redeem merge, reuse rejected, both doors resolve to survivor with both bindings, merged customer sees both bookings, `get_existing` from LINE door. Cleanup cancelled smoke bookings.
+- Regression: `npm run smoke:commands` still **PASS**; typecheck + build ✅.
+
+**Approx. toward DoD:** Phase 3a **~55%** (sibling core done; channel smokes + concierge/admin surfaces + enrichment left).
+
+```text
+chatiq-booking: Phase 3a (identity): [###########_________] ~55%
+```
+
+**Next:** push/deploy → deployed identity smoke; then channel smokes need a LINE-connected bot (LINE persistence first); concierge linking conversation; contact enrichment.
 
 ### 2026-10-21 — EOD handoff: identity (Phase 3a) designed & documented; pickup tomorrow
 

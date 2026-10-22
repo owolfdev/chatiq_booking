@@ -29,7 +29,12 @@ function statusFor(code: string | undefined, ok: boolean): number {
     case "SAME_SLOT":
     case "BOOKING_NOT_ACTIVE":
     case "BOOKING_IN_PAST":
+    case "TOKEN_USED":
+    case "TOKEN_EXPIRED":
+    case "MERGE_CONFLICT":
       return 409;
+    case "TOKEN_INVALID":
+      return 400;
     default:
       return 400;
   }

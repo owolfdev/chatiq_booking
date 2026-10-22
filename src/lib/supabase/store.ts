@@ -8,6 +8,8 @@ export type DbContact = {
   name: string | null;
   email: string | null;
   phone: string | null;
+  created_at?: string;
+  merged_into?: string | null;
 };
 
 export type DbSession = {
@@ -262,7 +264,7 @@ export async function getContactById(input: {
   if (!supabase) return null;
   const { data, error } = await supabase
     .from("contacts")
-    .select("id, team_id, name, email, phone")
+    .select("id, team_id, name, email, phone, created_at, merged_into")
     .eq("team_id", input.team_id)
     .eq("id", input.contact_id)
     .maybeSingle();
