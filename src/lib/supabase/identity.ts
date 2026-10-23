@@ -288,13 +288,18 @@ export async function redeemConnectToken(input: {
     expires_at: string;
     consumed_at: string | null;
   } | null = null;
+  /** Full URL tokens are globally unique by hash; short codes are bot-scoped. */
+  let matchedBy: "token" | "short_code" | null = null;
 
   const { data: byToken } = await supabase
     .from("connect_tokens")
     .select("id, team_id, bot_id, issuing_contact_id, expires_at, consumed_at")
     .eq("token_hash", sha256(raw))
     .maybeSingle();
-  token = byToken;
+  if (byToken) {
+    token = byToken;
+    matchedBy = "token";
+  }
 
   if (!token && digits.length >= 6) {
     // Short codes can collide across customers; prefer a live token, but
@@ -310,9 +315,18 @@ export async function redeemConnectToken(input: {
     const candidates = byCode ?? [];
     token =
       candidates.find((t) => !t.consumed_at) ?? candidates[0] ?? null;
+    if (token) matchedBy = "short_code";
   }
 
-  if (!token || token.team_id !== input.team_id || token.bot_id !== input.bot_id) {
+  // Team must always match. Full-token (URL) redeem may be called from the
+  // ChatIQ consent page with a different allowlisted bot_id on the same
+  // team — the hash is unique, so bot_id on the request is not required.
+  // Short codes stay scoped to the requesting bot.
+  if (
+    !token ||
+    token.team_id !== input.team_id ||
+    (matchedBy === "short_code" && token.bot_id !== input.bot_id)
+  ) {
     throw new IdentityError("TOKEN_INVALID", "Connect code is invalid");
   }
   if (token.consumed_at) {
@@ -348,7 +362,9 @@ export async function redeemConnectToken(input: {
 
   const result = await mergeContacts({
     team_id: input.team_id,
-    bot_id: input.bot_id,
+    // Prefer the issuing bot from the token (consent page may pass another
+    // allowlisted bot on the same team as request scope).
+    bot_id: token.bot_id,
     contact_a: issuingId,
     contact_b: redeemingId,
     actor_type: input.actor_type ?? "customer",

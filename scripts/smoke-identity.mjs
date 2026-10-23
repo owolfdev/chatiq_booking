@@ -28,6 +28,9 @@ const BASE = (process.env.BOOKING_SMOKE_BASE_URL || "http://localhost:3003").rep
 const TOKEN = process.env.BOOKING_SERVICE_TOKEN || process.env.BOOKING_SIBLING_TOKEN || "";
 const TEAM = process.env.BOOKING_SMOKE_TEAM_ID || "6eb8602b-b5d7-4544-94b1-429443242378";
 const BOT = process.env.BOOKING_SMOKE_BOT_ID || "ed98722d-bbad-485d-a187-c54b4429d544";
+/** Second allowlisted bot on the same team — simulates consent-page redeem scope ≠ issuing bot. */
+const ALT_BOT =
+  process.env.BOOKING_SMOKE_ALT_BOT_ID || "c967a5c0-b0dc-489e-b778-835b5c294588";
 const TZ = "Asia/Bangkok";
 
 let failures = 0;
@@ -39,7 +42,7 @@ function check(name, cond, extra = "") {
   }
 }
 
-async function exec(command, slots, identity) {
+async function exec(command, slots, identity, opts = {}) {
   const res = await fetch(`${BASE}/api/v1/commands/execute`, {
     method: "POST",
     headers: {
@@ -49,7 +52,7 @@ async function exec(command, slots, identity) {
     body: JSON.stringify({
       contract_version: "0",
       team_id: TEAM,
-      bot_id: BOT,
+      bot_id: opts.bot_id ?? BOT,
       command,
       slots: slots ?? {},
       timezone: TZ,
@@ -134,6 +137,41 @@ try {
     );
   } else {
     console.log("  - expired-token checks skipped (SUPABASE env not set)");
+  }
+
+  // Cross-bot full-token redeem (consent page): issue on ALT_BOT, redeem on
+  // BOT with the URL token. Short codes stay bot-scoped and are tested below.
+  if (ALT_BOT && ALT_BOT !== BOT) {
+    const crossStamp = Date.now();
+    const crossLine = { provider: "line", external_id: `smoke-xline-${crossStamp}`, verified: false };
+    const crossWeb = { provider: "web_user", external_id: `smoke-xweb-${crossStamp}`, verified: true };
+    const crossAvail = await exec("booking.get_availability", { limit: 3 }, crossLine, { bot_id: ALT_BOT });
+    const crossSlot = crossAvail.json.data?.slots?.[0];
+    const crossBook = crossSlot
+      ? await exec("booking.create", { starts_at: crossSlot.starts_at }, crossLine, { bot_id: ALT_BOT })
+      : { json: { ok: false } };
+    const crossBookingId = crossBook.json.data?.booking?.id;
+    if (crossBookingId) createdBookingIds.push(crossBookingId);
+    const crossIssued = await exec("booking.create_connect_token", {}, crossLine, { bot_id: ALT_BOT });
+    const crossToken = crossIssued.json.data?.token;
+    check(
+      "cross-bot connect token issued",
+      crossIssued.json.ok === true && Boolean(crossToken),
+      JSON.stringify(crossIssued.json)
+    );
+    const crossRedeem = await exec(
+      "booking.redeem_connect_token",
+      { code: crossToken },
+      crossWeb,
+      { bot_id: BOT }
+    );
+    check(
+      "full token redeems when request bot_id ≠ issuing bot (same team)",
+      crossRedeem.json.ok === true,
+      JSON.stringify(crossRedeem.json)
+    );
+  } else {
+    console.log("  - cross-bot full-token check skipped (ALT_BOT unset or same as BOT)");
   }
 
   // Issue at LINE door, redeem at web door.

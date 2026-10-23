@@ -175,6 +175,25 @@ Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b console (c
 
 ## 4) Progress Log
 
+### 2026-10-24 — LINE book ✅; consent redeem TOKEN_INVALID (cross-bot) fixed
+
+**What happened**
+- LINE (`chatiq-line-guide`) booked Consultation Tue 27 Oct 2026 10:00; concierge issued connect link + code `284432`.
+- Consent page redeem showed `TOKEN_INVALID`: ChatIQ `/api/booking/connect/redeem` scopes with allowlist **[0]** (pilot bot) while the token was issued for the LINE bot; sibling required `token.bot_id === request.bot_id`.
+
+**Fix (local; deploy booking sibling next)**
+- `redeemConnectToken`: full URL token (hash) → team match only; short codes stay bot-scoped; merge uses token’s issuing `bot_id`.
+- Smoke: cross-bot full-token redeem (issue on ALT_BOT, redeem on BOT).
+- ChatIQ redeem route comment clarified (team from allowlist[0] is fine when pilots share a team).
+
+**Approx. toward DoD:** Phase 3a **~80%** (channel smoke in progress; link blocked until sibling deploy).
+
+```text
+chatiq-booking: Phase 3a (identity): [################____] ~80%
+```
+
+**Next:** deploy `chatiq-booking` → re-ask LINE for a fresh link → consent redeem → then persistence + reverse link + notifications.
+
 ### 2026-10-24 — Consent page go-live verified (connect_url + signed-out CTA)
 
 **Verified**
