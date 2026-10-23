@@ -10,9 +10,9 @@ Owner: Engineering
 
 1. ~~**Phase 1 — Tool-ready sibling**~~ ✅ **DONE 2026-10-21** (see WS-F; smoke 20/20 locally + on Vercel).
 2. ~~**Phase 2 — LLM concierge**~~ ✅ **DONE 2026-10-21** (live-smoked EN/TH/ZH, see Progress Log). Enabled by `BOOKING_CONCIERGE=llm` (set in local `chatiq/.env.local`; add to Vercel env when deploying concierge to prod chat).
-3. **Phase 3a — Identity & account linking** — sibling core ✅; concierge linking **live-smoked 2026-10-24** (`CONCIERGE_LIVE_SMOKE=1` → 1/1); ChatIQ consent page built. Full spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md). **← CONTINUE HERE:**
-   - **Consent page go-live (do this next):** add `BOOKING_CONNECT_URL_BASE=https://www.chatiq.io/booking/connect` to **chatiq-booking** Vercel Production env → redeploy → e2e with a signed-in ChatIQ user + fresh connect token. Local already has `http://localhost:3000/booking/connect`. Sign-in has no `next` param — reopen the link after login; step-up deferred.
-   - **Channel smokes** (LINE-connected bot available — get bot id/OA first): LINE persistence → LINE→web via consent page → web→LINE code in chat → post-merge both-door lookup. **Not yet built:** both-channel "accounts linked" notifications.
+3. **Phase 3a — Identity & account linking** — sibling core ✅; concierge linking live-smoked; consent page **go-live ✅ 2026-10-24**. Full spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md). **← CONTINUE HERE:**
+   - ~~Consent page go-live~~ ✅ — Vercel `BOOKING_CONNECT_URL_BASE` + signed-out CTA verified. Optional: signed-in Link-accounts click-through.
+   - **Channel smokes (do this next)** — get the LINE-connected bot id / OA first, then: LINE persistence → LINE→web via consent page → web→LINE code in chat → post-merge both-door lookup. **Not yet built:** both-channel "accounts linked" notifications (build with this step).
    - **Contact enrichment**: LINE display name; web name/email at consent redemption.
    - After booking pushes: `BOOKING_SMOKE_BASE_URL=https://chatiq-booking.vercel.app npm run smoke:identity` (+ `smoke:commands`).
 4. **Phase 3b — Admin doors**: console (calendar/table, command buttons, ⌘K, commands reference, audit incl. identity audit + unmerge) → copilot with confirm-cards. See DoD Phase 3b.
@@ -88,7 +88,7 @@ Spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md). Do
 - [x] API exit tests (no LLM): `npm run smoke:identity` **19/19 on Vercel** — happy-path merge unifies bookings from both sides; wrong code `TOKEN_INVALID`; reuse `TOKEN_USED`; expired (backdated) code `TOKEN_EXPIRED` (2026-10-23)
 - [ ] Channel smokes: LINE persistence (new conversation finds booking); LINE→web link (consent screen, fresh login); web→LINE short-code redemption in chat; post-merge lookup from **both** doors; both-channel "accounts linked" notification (notification not yet built)
 - [x] Concierge linking conversation built + **live EN→TH smoke PASS 2026-10-24** (`chatiq/tests/booking-sibling-concierge-live.test.ts`; unit 12/12; sibling timeout raised for merge)
-- [x] Consent page built, **ChatIQ-hosted + login-required** (decision 2026-10-23): `chatiq` `/booking/connect` + `/api/booking/connect/redeem` (session = web-door proof; `web_user` claim `verified:true`). Go-live pending `BOOKING_CONNECT_URL_BASE` in chatiq-booking Vercel env + e2e verify
+- [x] Consent page built + **go-live 2026-10-24**: ChatIQ-hosted login-required `/booking/connect`; Vercel `BOOKING_CONNECT_URL_BASE` set; prod token returns `connect_url`; signed-out CTA verified. Signed-in merge click-through optional/remaining.
 - [ ] Contact enrichment: LINE display-name snapshot; web name/email copied at redemption (display only)
 
 ### Phase 3b — Admin doors (same command bus)
@@ -174,6 +174,20 @@ Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b console (c
 - [ ] Copilot: NL → confirm-card → execute; customer notification on admin changes
 
 ## 4) Progress Log
+
+### 2026-10-24 — Consent page go-live verified (connect_url + signed-out CTA)
+
+**Verified**
+- Vercel env `BOOKING_CONNECT_URL_BASE=https://www.chatiq.io/booking/connect` live: `booking.create_connect_token` returns `connect_url` with that base + `?token=…`.
+- `GET https://www.chatiq.io/booking/connect?token=…` → 200, **Sign in to continue** (signed-out). Missing-token URL shows “missing its code”.
+
+**Approx. toward DoD:** Phase 3a **~80%**.
+
+```text
+chatiq-booking: Phase 3a (identity): [################____] ~80%
+```
+
+**Next:** LINE channel smokes (get bot id/OA) + both-channel notifications; contact enrichment; optional signed-in consent click-through.
 
 ### 2026-10-24 — Concierge linking live smoke PASS; sibling timeout raised
 
