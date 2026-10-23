@@ -1,7 +1,7 @@
 # Mission: Booking sibling v1 (`chatiq-booking`)
 
-Last updated: 2026-10-21 (EOD handoff)  
-Status: **In progress** — **Phase 1 ✅ + Phase 2 ✅** (LLM concierge live-smoked EN/TH/ZH). Next: **Phase 3a — Identity & account linking (LINE ↔ web)**, then 3b admin doors. Design: [`booking-command-library.md`](./booking-command-library.md) · Identity spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md).  
+Last updated: 2026-10-23 (EOD)  
+Status: **In progress** — **Phase 1 ✅ + Phase 2 ✅** (LLM concierge live-smoked EN/TH/ZH). **Phase 3a in progress (~70%)**: sibling identity core ✅ deployed; concierge linking + consent page built (live smoke blocked on a dead OpenAI key — see Resume here). Then 3b admin doors. Design: [`booking-command-library.md`](./booking-command-library.md) · Identity spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md).  
 Owner: Engineering
 
 ## Resume here (next session)
@@ -10,10 +10,12 @@ Owner: Engineering
 
 1. ~~**Phase 1 — Tool-ready sibling**~~ ✅ **DONE 2026-10-21** (see WS-F; smoke 20/20 locally + on Vercel).
 2. ~~**Phase 2 — LLM concierge**~~ ✅ **DONE 2026-10-21** (live-smoked EN/TH/ZH, see Progress Log). Enabled by `BOOKING_CONCIERGE=llm` (set in local `chatiq/.env.local`; add to Vercel env when deploying concierge to prod chat).
-3. **Phase 3a — Identity & account linking** — **sibling core DONE 2026-10-23** (migration applied via CLI; identity smoke 16/16). Remaining: channel smokes + concierge/admin surfaces. Full spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md). **← CONTINUE HERE:**
-   - Channel smokes (needs a LINE-connected bot): LINE persistence → LINE→web link consent surface → web→LINE code in chat → post-merge both-door lookup + notifications.
-   - Concierge linking conversation (offer + code redemption, no existence disclosure); contact enrichment (LINE display name, web profile at redemption).
-   - Deployed identity smoke after next push: `BOOKING_SMOKE_BASE_URL=https://chatiq-booking.vercel.app npm run smoke:identity`.
+3. **Phase 3a — Identity & account linking** — sibling core ✅ deployed (smoke **19/19** incl. expired-token); **concierge linking + ChatIQ consent page built 2026-10-23 EOD**. Full spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md). **← CONTINUE HERE (tomorrow, in order):**
+   - **Fix the dead OpenAI key**: `OPENAI_API_KEY` in `chatiq/.env.local` returns **401 from OpenAI** (verified 2026-10-23; all gates/env pass). Replace it, then rerun the live linking smoke in `chatiq`: `CONCIERGE_LIVE_SMOKE=1 npx vitest run tests/booking-sibling-concierge-live.test.ts` (EN door issues code → TH door redeems after consent → one survivor). Nothing else is blocked by this except live LLM smokes.
+   - **Consent page go-live**: add `BOOKING_CONNECT_URL_BASE=https://www.chatiq.io/booking/connect` to the **chatiq-booking Vercel env** (local `.env.local` already set to `http://localhost:3000/booking/connect`), redeploy, then e2e-verify `/booking/connect?token=…` in `chatiq` with a signed-in user + a fresh token (page/redeem logic built; browser visual check was interrupted — re-verify). Note: sign-in currently lands on `/dashboard` (no `next` support) — customer re-opens the link after login; step-up (fresh-auth) enforcement deferred.
+   - **Channel smokes** (user confirmed a LINE-connected bot is available — get its bot id/OA first): LINE persistence → LINE→web link via consent page → web→LINE code in chat → post-merge both-door lookup. **Not yet built:** both-channel "accounts linked" notifications (spec §4 step 5) — build with this step.
+   - **Contact enrichment**: LINE display-name snapshot (LINE profile API); web name/email copied into the sibling contact at consent redemption (consent API currently redeems without enrichment).
+   - After any push: deployed re-runs `BOOKING_SMOKE_BASE_URL=https://chatiq-booking.vercel.app npm run smoke:identity` (+ `smoke:commands`).
 4. **Phase 3b — Admin doors**: console (calendar/table, command buttons, ⌘K, commands reference, audit incl. identity audit + unmerge) → copilot with confirm-cards. See DoD Phase 3b.
 5. Parallel/later — widen `BOOKING_SIBLING_BOT_IDS` per added bot (smoke each); WS-D code archive of legacy engine (docs already archived 2026-10-21); payments; add `BOOKING_CONCIERGE=llm` to ChatIQ Vercel env when concierge goes to prod.
 
@@ -84,9 +86,10 @@ Spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md). Do
 
 - [x] Migration: `connect_tokens` (hashed, one-time, 10-min), `identity_audit_log`, `contacts.merged_into`/status — applied 2026-10-23 via Supabase CLI (`db push`)
 - [x] `booking.create_connect_token` / `booking.redeem_connect_token` / `booking.get_customer`; merge is internal-only, deterministic survivor rule, tombstone + audit, `MERGE_CONFLICT` aborts safely
-- [x] API exit tests (no LLM): `npm run smoke:identity` **16/16 locally** — happy-path merge unifies bookings from both sides; wrong code `TOKEN_INVALID`; reuse `TOKEN_USED`. (Expired-token path implemented, not smoke-tested — needs a backdated token.)
-- [ ] Channel smokes: LINE persistence (new conversation finds booking); LINE→web link (consent screen, fresh login); web→LINE short-code redemption in chat; post-merge lookup from **both** doors; both-channel "accounts linked" notification
-- [ ] Concierge offers linking with **zero existence disclosure** pre-merge (EN/TH at minimum)
+- [x] API exit tests (no LLM): `npm run smoke:identity` **19/19 on Vercel** — happy-path merge unifies bookings from both sides; wrong code `TOKEN_INVALID`; reuse `TOKEN_USED`; expired (backdated) code `TOKEN_EXPIRED` (2026-10-23)
+- [ ] Channel smokes: LINE persistence (new conversation finds booking); LINE→web link (consent screen, fresh login); web→LINE short-code redemption in chat; post-merge lookup from **both** doors; both-channel "accounts linked" notification (notification not yet built)
+- [x] Concierge linking conversation built (`chatiq` concierge identity tools + prompt rules + deterministic consent gate; unit 12/12) — **live EN/TH smoke pending a valid `OPENAI_API_KEY`** (current key 401s; harness: `chatiq/tests/booking-sibling-concierge-live.test.ts`)
+- [x] Consent page built, **ChatIQ-hosted + login-required** (decision 2026-10-23): `chatiq` `/booking/connect` + `/api/booking/connect/redeem` (session = web-door proof; `web_user` claim `verified:true`). Go-live pending `BOOKING_CONNECT_URL_BASE` in chatiq-booking Vercel env + e2e verify
 - [ ] Contact enrichment: LINE display-name snapshot; web name/email copied at redemption (display only)
 
 ### Phase 3b — Admin doors (same command bus)
@@ -128,9 +131,10 @@ Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b console (c
 - [x] Migration: `connect_tokens`, `identity_audit_log`, `contacts.merged_into` (applied 2026-10-23)
 - [x] Connect token issue/redeem + internal merge (survivor rule, tombstone, audit, conflict abort)
 - [x] `booking.get_customer`; contact enrichment (LINE display name, web profile at redemption) ← enrichment pending
-- [x] API exit tests: `scripts/smoke-identity.mjs` 16/16 locally (commands smoke still green)
-- [ ] Channel smokes: LINE persistence; LINE→web; web→LINE code; post-merge both-door lookup + notifications
-- [ ] Concierge linking conversation (no existence disclosure); admin unmerge lands in WS-H
+- [x] API exit tests: `scripts/smoke-identity.mjs` **19/19 on Vercel** incl. backdated-token `TOKEN_EXPIRED` (2026-10-23; commands smoke still green)
+- [x] Concierge linking conversation: identity tools + prompt (offer/issue/consent/redeem, no existence disclosure, error mapping) + deterministic `CONFIRMATION_REQUIRED` gate before sibling redeem; unit tests 12/12. **Live EN/TH smoke blocked: `OPENAI_API_KEY` in `chatiq/.env.local` → OpenAI 401** (harness committed: `chatiq/tests/booking-sibling-concierge-live.test.ts`, gated by `CONCIERGE_LIVE_SMOKE=1`)
+- [x] Consent page (ChatIQ-hosted, login-required per user decision 2026-10-23): `chatiq/src/app/(app)/booking/connect/` + `src/app/api/booking/connect/redeem/`; sibling `BOOKING_CONNECT_URL_BASE` set locally. Pending: Vercel env (`https://www.chatiq.io/booking/connect`) + e2e verify
+- [ ] Channel smokes: LINE persistence; LINE→web; web→LINE code; post-merge both-door lookup + **both-channel notifications (not built yet)**; admin unmerge lands in WS-H
 
 ### WS-D — Archive legacy
 
@@ -162,6 +166,7 @@ Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b console (c
 - [x] Tool loop calls sibling `commands/execute`; LLM renders replies in customer language; failure → deterministic sibling fallback
 - [x] Narrowing + "more" pagination via re-query (prompt policy: ≤7-day windows, ≤3 offered)
 - [x] Smoke: EN / TH / ZH full flows + next-month + returned-slots-only (2026-10-21, DB-verified)
+- [x] Identity tools in concierge (create/redeem connect token, get_customer) + linking prompt rules + deterministic consent gate (2026-10-23); live linking smoke harness committed, run pending valid OpenAI key
 
 ### WS-H — Phase 3b: admin doors
 
@@ -170,6 +175,33 @@ Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b console (c
 - [ ] Copilot: NL → confirm-card → execute; customer notification on admin changes
 
 ## 4) Progress Log
+
+### 2026-10-23 (EOD) — Phase 3a steps 1/2/5 built; live smoke blocked on dead OpenAI key; EOD handoff
+
+**Changed**
+- **Step 1 — concierge linking conversation (`chatiq`)**: concierge gained tools `booking_create_connect_token` / `booking_redeem_connect_token` / `booking_get_customer` (adapter already passes any command through); system-prompt rules 10–12 (neutral offer only when another channel is mentioned, issue→instruct, one consent summary then MUST redeem same-turn, error mapping `TOKEN_INVALID/EXPIRED/USED`, **zero existence disclosure**, never look up by name/phone/email); deterministic gate in the tool loop — redeem with `confirmed !== true` is refused locally as `CONFIRMATION_REQUIRED` and never reaches the sibling. Unit tests: `tests/booking-sibling-concierge.test.ts` **12/12** (tool list, prompt rules, issue flow, gate blocks, redeem+get_customer merge flow); typecheck ✅.
+- **Step 1 live harness (`chatiq`)**: `tests/booking-sibling-concierge-live.test.ts`, skipped unless `CONCIERGE_LIVE_SMOKE=1`. Drives two conversations against the deployed sibling: EN door asks to link → 6-digit code; TH door presents code → consent summary (Thai asserted) → confirms → merge; asserts TH door resolves to the EN door's (older) survivor contact; post-link EN check. Includes status-only fetch/gate diagnostics (no secrets logged).
+- **Step 5 — expired-token smoke (`chatiq-booking`)**: `scripts/smoke-identity.mjs` now issues a token, backdates `expires_at` via Supabase REST (service key, hashed code lookup), and asserts redeem → `TOKEN_EXPIRED`. Placed before the real issue (issuing supersedes outstanding). Skips cleanly without Supabase env.
+- **Step 2 — consent page (`chatiq`, user decision: ChatIQ-hosted, login-required)**: `src/app/(app)/booking/connect/page.tsx` (server: token check → signed-out card with sign-in CTA, or consent card; discloses nothing about the issuing account), `connect-form.tsx` (confirm/cancel, error copy per token code, post-merge own-summary: channels + upcoming count), `src/app/api/booking/connect/redeem/route.ts` (session required; pilot scope from `BOOKING_SIBLING_BOT_IDS` first entry + `bot_bots.team_id` via admin client; redeems with `web_user` claim `verified:true`, then `get_customer` summary). Sibling `BOOKING_CONNECT_URL_BASE=http://localhost:3000/booking/connect` set in local `chatiq-booking/.env.local`.
+
+**Verified**
+- `chatiq`: concierge unit tests **12/12**; `npm run typecheck` ✅ (twice, incl. consent page/API).
+- `chatiq-booking`: `BOOKING_SMOKE_BASE_URL=https://chatiq-booking.vercel.app npm run smoke:identity` → **19/19 PASS** (3 new expiry checks included). Local run unavailable (sibling dev server not running; deployed is the same code).
+- Live concierge harness reached OpenAI and got **401** — gates printed all-true (`concierge=true sibling=true botAllowed=true openaiKey=true`), so the only failure is the credential.
+
+**Blockers / user actions**
+- 🔑 `OPENAI_API_KEY` in `chatiq/.env.local` is rejected by OpenAI (**401**). Replace with a valid key → live linking smoke is one command (see Resume here). (Prod ChatIQ Vercel still has no `BOOKING_CONCIERGE`, so prod chat unaffected.)
+- ▲ Add `BOOKING_CONNECT_URL_BASE=https://www.chatiq.io/booking/connect` to **chatiq-booking Vercel env** + redeploy for consent-page go-live.
+- Consent page browser visual check was interrupted (IDE browser hung) — re-verify tomorrow; sign-in has no `next` param support, so post-login the customer re-opens the link (accepted pilot friction; step-up fresh-auth enforcement deferred).
+
+**Approx. toward DoD:** Phase 3a **~70%** (sibling core + concierge + consent built & unit/deployed-smoke verified; live LLM smoke, channel smokes, notifications, enrichment left).
+
+```text
+chatiq-booking: Phase 3a (identity): [##############______] ~70%
+chatiq:         Phase 3a surfaces:   [##############______] ~70%
+```
+
+**Next (tomorrow, in order):** (1) valid OpenAI key → run live linking smoke; (2) Vercel env for connect URL → consent e2e; (3) LINE channel smokes + build both-channel "accounts linked" notifications; (4) contact enrichment. Then Phase 3b admin doors.
 
 ### 2026-10-23 — Phase 3a sibling core pushed + deployed smokes green
 

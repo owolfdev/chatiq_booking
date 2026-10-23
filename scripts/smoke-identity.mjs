@@ -12,6 +12,7 @@
  * Usage: npm run smoke:identity
  */
 import { readFileSync, existsSync } from "node:fs";
+import { createHash } from "node:crypto";
 
 function loadDotEnvLocal() {
   const path = new URL("../.env.local", import.meta.url);
@@ -98,6 +99,42 @@ try {
   // Wrong code rejected.
   const wrong = await exec("booking.redeem_connect_token", { code: "000000" }, webIdentity);
   check("wrong code rejected (TOKEN_INVALID)", !wrong.json.ok && wrong.json.code === "TOKEN_INVALID", JSON.stringify(wrong.json));
+
+  // Expired code rejected: issue a token, backdate its expiry directly in
+  // the DB (service key), then redeem must fail with TOKEN_EXPIRED. Done
+  // BEFORE the real issue below because issuing supersedes outstanding
+  // tokens. Skipped when Supabase env is unavailable.
+  const supaUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supaKey = process.env.SUPABASE_SECRET_KEY;
+  if (supaUrl && supaKey) {
+    const stale = await exec("booking.create_connect_token", {}, lineIdentity);
+    const staleCode = stale.json.data?.short_code;
+    check("stale token issued for expiry test", stale.json.ok === true && Boolean(staleCode), JSON.stringify(stale.json));
+    const codeHash = createHash("sha256").update(String(staleCode)).digest("hex");
+    const patch = await fetch(
+      `${supaUrl.replace(/\/$/, "")}/rest/v1/connect_tokens?short_code_hash=eq.${codeHash}`,
+      {
+        method: "PATCH",
+        headers: {
+          apikey: supaKey,
+          Authorization: `Bearer ${supaKey}`,
+          "Content-Type": "application/json",
+          Prefer: "return=representation",
+        },
+        body: JSON.stringify({ expires_at: new Date(Date.now() - 60_000).toISOString() }),
+      }
+    );
+    const patched = await patch.json().catch(() => []);
+    check("stale token backdated in DB", patch.ok && Array.isArray(patched) && patched.length === 1, `status=${patch.status}`);
+    const expired = await exec("booking.redeem_connect_token", { code: staleCode }, webIdentity);
+    check(
+      "expired code rejected (TOKEN_EXPIRED)",
+      !expired.json.ok && expired.json.code === "TOKEN_EXPIRED",
+      JSON.stringify(expired.json)
+    );
+  } else {
+    console.log("  - expired-token checks skipped (SUPABASE env not set)");
+  }
 
   // Issue at LINE door, redeem at web door.
   const issued = await exec("booking.create_connect_token", {}, lineIdentity);
