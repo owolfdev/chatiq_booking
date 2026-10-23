@@ -48,9 +48,19 @@ export async function resolveOrCreateContact(input: {
     throw new Error("Supabase not configured");
   }
 
-  const claims =
-    input.claims?.filter((c) => c.provider?.trim() && c.external_id?.trim()) ??
-    [];
+  // Deduplicate by (provider, external_id) — callers sometimes pass the
+  // same claim twice (e.g. conversation_id + matching identity claim).
+  const claims: IdentityBindingClaim[] = [];
+  const seen = new Set<string>();
+  for (const c of input.claims ?? []) {
+    const provider = c.provider?.trim();
+    const external_id = c.external_id?.trim();
+    if (!provider || !external_id) continue;
+    const key = `${provider}\0${external_id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    claims.push({ ...c, provider, external_id });
+  }
 
   for (const claim of claims) {
     const { data: binding, error: bindingError } = await supabase

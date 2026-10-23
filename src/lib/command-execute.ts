@@ -209,18 +209,27 @@ export async function executeBookingCommand(
           "Provide identity_claims, conversation_id, or slots.contact_id"
         );
       }
+      // conversation_id is often already present as a chatiq_conversation
+      // claim (ChatIQ adapter). Append only when missing — a duplicate in
+      // the claims array causes a unique-constraint failure on insert.
+      const mergedClaims = [...claims];
+      if (body.conversation_id) {
+        const already = mergedClaims.some(
+          (c) =>
+            c.provider === "chatiq_conversation" &&
+            c.external_id === body.conversation_id
+        );
+        if (!already) {
+          mergedClaims.push({
+            provider: "chatiq_conversation",
+            external_id: body.conversation_id,
+            verified: false,
+          });
+        }
+      }
       const contact = await resolveOrCreateContact({
         team_id,
-        claims: body.conversation_id
-          ? [
-              ...claims,
-              {
-                provider: "chatiq_conversation",
-                external_id: body.conversation_id,
-                verified: false,
-              },
-            ]
-          : claims,
+        claims: mergedClaims,
       });
       contactId = contact.id;
     } else {
