@@ -91,7 +91,7 @@ Goal: never dump dozens of slots; never interrogate either.
 |-----------|------|-----------------|
 | **Customer concierge** (ChatIQ LLM) | Customers, any language | Conversational ("Shall I cancel…?" → yes) |
 | **Admin console** (booking `/admin` UI) | Human agents / providers | Direct: calendar/table, detail drawer with command buttons, ⌘K palette, `/admin/commands` reference (`src/lib/admin/command-catalog.ts`) |
-| **Admin copilot** (LLM in admin console) | Human agents | **Confirm cards**: LLM proposes a command (e.g. reschedule + notify customer); a human clicks Confirm/Edit/Dismiss. Never mutates silently. |
+| **Admin copilot** (`/admin/copilot`) | Human agents | **Confirm cards**: propose (OpenAI optional + heuristic) → Confirm/Edit/Dismiss; executes with `via: llm`. Customer channel notify via ChatIQ is the follow-on. |
 
 Actor context on every command: `actor_type` (customer/agent/provider/admin), `actor_id`, `team_id`, scope. Customers: own contact only. Providers: own calendar. Agents: team-wide. If the LLM layer is down, the admin console still runs the business deterministically — the console is the fallback and the audit surface.
 

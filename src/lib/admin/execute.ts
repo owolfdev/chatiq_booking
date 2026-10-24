@@ -9,6 +9,9 @@ export async function executeAdminCommand(params: {
   command: string;
   slots?: Record<string, unknown>;
   timezone?: string;
+  /** Defaults to ui (console buttons). Copilot should pass llm. */
+  via?: "ui" | "llm" | "api" | "system" | "cron";
+  actor_id?: string;
   identity_claims?: Array<{
     provider: string;
     external_id: string;
@@ -16,8 +19,16 @@ export async function executeAdminCommand(params: {
   }>;
   contact_profile?: { name?: string | null; email?: string | null } | null;
 }): Promise<AdminCommandResult> {
-  const { session, command, slots, timezone, identity_claims, contact_profile } =
-    params;
+  const {
+    session,
+    command,
+    slots,
+    timezone,
+    via = "ui",
+    actor_id = "admin-console",
+    identity_claims,
+    contact_profile,
+  } = params;
   if (!session.token.trim()) {
     return { ok: false, error: "Token required", code: "UNAUTHORIZED" };
   }
@@ -38,7 +49,7 @@ export async function executeAdminCommand(params: {
       command,
       slots: slots ?? {},
       timezone: timezone ?? "Asia/Bangkok",
-      actor: { type: "admin", id: "admin-console", via: "ui" },
+      actor: { type: "admin", id: actor_id, via },
       ...(identity_claims ? { identity_claims } : {}),
       ...(contact_profile ? { contact_profile } : {}),
     }),

@@ -306,6 +306,12 @@ export const ADMIN_NAV_SHORTCUTS: Array<{
     href: "/admin/audit",
     keywords: ["history", "mutations", "who"],
   },
+  {
+    id: "nav.copilot",
+    label: "Copilot",
+    href: "/admin/copilot",
+    keywords: ["ai", "helper", "ask", "propose"],
+  },
 ];
 
 export function actorLabel(actor: CommandActor): string {
