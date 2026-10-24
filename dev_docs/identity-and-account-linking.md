@@ -1,7 +1,7 @@
 # Identity & account linking (LINE ↔ web)
 
-Last updated: 2026-10-21
-Status: **Design locked (discussion 2026-10-21); not yet built.** This is **Phase 3a** — before admin doors (Phase 3b).
+Last updated: 2026-10-24
+Status: **Design locked; mostly built & live-smoked.** Phase 3a ~90% — LINE→web consent + post-merge web lookup verified on `chatiq-line-guide` (2026-10-24). Remaining: web→LINE short-code smoke, both-channel link notifications, contact enrichment. Then Phase 3b admin.
 Mission: [`_mission-booking-sibling-v1.md`](./_mission-booking-sibling-v1.md) (Resume here, WS-C, DoD Phase 3a)
 Design context: [`booking-command-library.md`](./booking-command-library.md)
 
@@ -14,20 +14,20 @@ Design context: [`booking-command-library.md`](./booking-command-library.md)
 2. **Vocabulary:** a **channel account** = one login identity at one door (web auth user, LINE user ID). A **customer** = the real person, who may hold several channel accounts. Bookings belong to the customer; channel accounts are the keys.
 3. **Linking is additive.** Connecting two doors never invalidates either account; it unifies the customer record behind them.
 
-## 2) Current status (2026-10-21, honest)
+## 2) Current status (2026-10-24)
 
 | Piece | Status |
 |-------|--------|
-| `contacts` + `identity_bindings` tables (`team_id, provider, external_id, verified`) | ✅ Built (`supabase/migrations/20261019000000_booking_core_v0.sql`) |
-| Claims per turn: `chatiq_conversation`, `line`/`instagram` channel user ID, `web_user` (when logged in) | ✅ Built (`chatiq/src/lib/booking-sibling/chat-turn.ts`) |
-| Resolution: match any known binding → same contact; else create contact + bind all presented claims | ✅ Built (`resolveOrCreateContact`) |
-| Same web thread / same LINE user across conversations | ✅ Works by design (LINE path **untested on a real LINE bot** — pilot is web) |
-| Web, fresh anonymous thread | ⚠️ New contact (conversation claim only) — bookings not carried |
-| Name/email/phone on contact | ❌ Not captured (`name="Guest"`, verified always `false`) |
-| **LINE ↔ web linking / merge** | ❌ **Not built** — the subject of this doc |
-| Admin view of a customer's bindings; admin merge/unmerge | ❌ Not built (Phase 3b) |
+| `contacts` + `identity_bindings` | ✅ |
+| Claims per turn (+ prefer `web_user`/`line` over conversation) | ✅ Live; dashboard chat attaches session `web_user` |
+| Connect token + merge + consent page | ✅ Live (cross-bot full-token redeem fixed) |
+| LINE book + LINE→web link + post-merge **web** lookup | ✅ Live on `chatiq-line-guide` (2026-10-24) |
+| web→LINE short-code in chat | ⬜ Smoke remaining |
+| Both-channel “accounts linked” notification | ❌ Not built |
+| Contact enrichment (LINE name; web email at redeem) | ❌ Not built |
+| Admin bindings view / unmerge | ❌ Phase 3b |
 
-**The gap, plainly:** a customer who books on web and asks on LINE (or reverse) is two customers today. `get_existing` on the second door finds nothing.
+**Still open:** reverse-door short-code smoke + tripwire notifications + enrichment. Linked customers already share bookings across doors once claims resolve (web chat threads stay separate from LINE threads).
 
 ## 3) The one security rule
 

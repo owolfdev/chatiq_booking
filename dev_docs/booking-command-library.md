@@ -46,17 +46,20 @@ Internal names stay English. Inputs/outputs are structured. `actor` is attached 
 
 | Command | Mutating | Inputs | Returns |
 |---------|----------|--------|---------|
-| `booking.list_services` | No | — | services (id, title, duration) |
+| `booking.list_services` | No | — | services (id, title, duration, category, …) |
+| `booking.search_services` | No | query / category, limit | **Phase 3b.0** — top matches for large catalogs |
 | `booking.get_existing` | No | contact | next upcoming booking or none |
-| `booking.get_availability` | No | service, date_from, date_to, time_of_day?, limit ≤ 5 | matching open slots (ISO + tz) |
+| `booking.get_availability` | No | service, date_from, date_to, time_of_day?, limit ≤ 5 | matching open slots (ISO + tz); **3b.0+** honors owner hours/blocks |
 | `booking.create` | Yes | service, starts_at (from a returned slot) | booking (id, status, starts_at) |
 | `booking.cancel` | Yes | booking_id, confirmed=true | booking status |
 | `booking.reschedule` | Yes | booking_id, new starts_at (from a returned slot) | old cancelled + new booking |
 | `booking.faq` *(data, not a command)* | No | — | service/policy facts for the LLM to answer from |
 
-### Admin-scope commands (Phase 3, same bus)
+### Admin-scope commands (Phase 3 / 3b.0, same bus)
 
-`booking.admin_search` (by day/provider/service/customer/status), `booking.create_on_behalf`, plus the customer commands with admin scope, and `availability.block` / `availability.set_hours`. Admin-only commands are never exposed to the customer concierge.
+`booking.admin_search` (by day/provider/service/customer/status), `booking.create_on_behalf`, plus the customer commands with admin scope.
+
+**Catalog & hours (Phase 3b.0 — design locked):** `catalog.upsert_service`, `catalog.set_active`, `catalog.reorder`, `availability.set_hours`, `availability.set_exception`, `availability.block`, `availability.unblock`. Spec: [`service-catalog-and-availability.md`](./service-catalog-and-availability.md). Admin-only — never exposed to the customer concierge.
 
 ### What happened to the v0 commands
 
@@ -101,6 +104,14 @@ Full spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md
 - `booking.get_customer` exposes a customer's channel accounts to themselves and to staff (admin detail/unmerge in Phase 3b).
 - The concierge may offer and guide the ceremony with zero existence disclosure pre-merge; it never executes `merge_contacts` directly.
 
+## 6b) Service catalog & availability (Phase 3b.0)
+
+Full spec: [`service-catalog-and-availability.md`](./service-catalog-and-availability.md). Summary:
+
+- Owner-configured, **business-agnostic** catalog (1–100+ services) + weekly hours / exceptions / blocks; shared calendar per bot in v1 (no staff matrix yet).
+- Customer path unchanged at the command level; large catalogs use `search_services` instead of dumping titles into the prompt.
+- Implement **after** Phase 3a leftovers; design is locked, schema/UI not started.
+
 ## 7) Contract evolution
 
 - **v0 (today, pilot):** `POST /api/v1/turns/handle` — ChatIQ sends raw `message_text` + optional pre-selected `command`; sibling classifies (English heuristics) and returns English `reply_text`. Proven in pilot; now frozen as fallback/API-smoke path.
@@ -109,7 +120,7 @@ Full spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md
 ## 8) Explicit non-goals (v1)
 
 - Sibling-side natural-language parsing, per-language regex/phrase tables.
-- Payments, external calendar sync, waitlists, multi-provider optimization.
+- Payments, external calendar sync, waitlists, multi-provider optimization / staff-room assignment (post–3b.0).
 - Admin copilot executing mutations without a human confirm click.
 
 ## 9) Roadmap

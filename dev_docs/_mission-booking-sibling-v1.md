@@ -1,7 +1,7 @@
 # Mission: Booking sibling v1 (`chatiq-booking`)
 
 Last updated: 2026-10-24  
-Status: **In progress** — **Phase 1 ✅ + Phase 2 ✅**. **Phase 3a ~75%**: sibling identity core ✅; concierge linking **live-smoked EN→TH** (2026-10-24); consent page built, go-live pending Vercel env. Then 3b admin doors. Design: [`booking-command-library.md`](./booking-command-library.md) · Identity spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md).  
+Status: **In progress** — **Phase 1 ✅ + Phase 2 ✅**. **Phase 3a ~90%**: live LINE↔web link + post-merge web lookup verified (2026-10-24). Remaining: web→LINE short-code smoke, both-channel link notifications, contact enrichment → then **Phase 3b.0** catalog/hours (design locked) → **Phase 3b** admin console. Design: [`booking-command-library.md`](./booking-command-library.md) · Identity: [`identity-and-account-linking.md`](./identity-and-account-linking.md) · Catalog: [`service-catalog-and-availability.md`](./service-catalog-and-availability.md).  
 Owner: Engineering
 
 ## Resume here (next session)
@@ -10,24 +10,30 @@ Owner: Engineering
 
 1. ~~**Phase 1 — Tool-ready sibling**~~ ✅ **DONE 2026-10-21** (see WS-F; smoke 20/20 locally + on Vercel).
 2. ~~**Phase 2 — LLM concierge**~~ ✅ **DONE 2026-10-21** (live-smoked EN/TH/ZH, see Progress Log). Enabled by `BOOKING_CONCIERGE=llm` (set in local `chatiq/.env.local`; add to Vercel env when deploying concierge to prod chat).
-3. **Phase 3a — Identity & account linking** — sibling core ✅; concierge linking live-smoked; consent page **go-live ✅ 2026-10-24**. Full spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md). **← CONTINUE HERE:**
-   - ~~Consent page go-live~~ ✅ — Vercel `BOOKING_CONNECT_URL_BASE` + signed-out CTA verified. Optional: signed-in Link-accounts click-through.
-   - **Channel smokes** — LINE book ✅; LINE→web consent link ✅ (2026-10-24). **Do this next:** post-merge lookup from both doors → web→LINE short-code in chat. **Not yet built:** both-channel "accounts linked" notifications (build with this step).
-   - **Contact enrichment**: LINE display name; web name/email at consent redemption.
-   - After booking pushes: `BOOKING_SMOKE_BASE_URL=https://chatiq-booking.vercel.app npm run smoke:identity` (+ `smoke:commands`).
-4. **Phase 3b — Admin doors**: console (calendar/table, command buttons, ⌘K, commands reference, audit incl. identity audit + unmerge) → copilot with confirm-cards. See DoD Phase 3b.
-5. Parallel/later — widen `BOOKING_SIBLING_BOT_IDS` per added bot (smoke each); WS-D code archive of legacy engine (docs already archived 2026-10-21); payments; add `BOOKING_CONCIERGE=llm` to ChatIQ Vercel env when concierge goes to prod.
+3. **Phase 3a — Identity & account linking** — **← CONTINUE HERE** (spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md)):
+   - ~~Consent go-live + LINE book + LINE→web consent merge + post-merge web lookup~~ ✅ **2026-10-24** (see Progress Log EOD).
+   - **Tomorrow first:** **web→LINE** — from a signed-in web chat (or pilot web bot), issue a connect code; redeem that short code in the **LINE** OA chat; confirm both doors still see the same booking.
+   - **Then build:** both-channel “accounts linked” tripwire notifications (not built; required by DoD).
+   - **Then:** contact enrichment (LINE display name; web name/email at redemption — display only).
+   - Optional quick check: new LINE conversation still finds the Tue 10:00 booking (LINE user-id persistence).
+4. **Phase 3b.0 — Service catalog & hours** (design locked; **do not implement until 3a leftovers done**): [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) — owner CRUD for 1–100 services, weekly hours/exceptions/blocks, `search_services`, shared calendar v1.
+5. **Phase 3b — Admin doors**: console (calendar/table, command buttons, ⌘K, commands reference, audit incl. identity audit + unmerge) → copilot with confirm-cards. Services/Hours UI is part of this console (3b.0 first).
+6. Parallel/later — widen `BOOKING_SIBLING_BOT_IDS` per added bot (smoke each); WS-D code archive of legacy engine (docs already archived 2026-10-21); payments; add `BOOKING_CONCIERGE=llm` to ChatIQ Vercel env when concierge goes to prod.
 
-**Minor known quirk (not blocking):** reschedule offer list can include the just-freed original slot (cancel-then-offer). Picking it would rebook the same time. Consider excluding the original `starts_at` from the reschedule offer later (or handle in LLM offer rendering in Phase 2).
+**Live pilot context (do not rediscover):**
+- LINE OA bot: `chatiq-line-guide` / `c967a5c0-b0dc-489e-b778-835b5c294588` — `booking_mode=full`, on ChatIQ `BOOKING_SIBLING_BOT_IDS` (with pilot).
+- Pilot web bot: `booking-system-test-bot` / `ed98722d-bbad-485d-a187-c54b4429d544`.
+- Linked smoke customer: survivor contact `8f94e5d6-…`; LINE `U524c2d98…` + `web_user` `cc875ce1-…`; booking `6499b0ef-…` Consultation **2026-10-27 10:00 Asia/Bangkok**.
+- Web chat proof URL: https://www.chatiq.io/chat/chatiq-line-guide
+- Env: ChatIQ Vercel has allowlist + `BOOKING_RUNTIME=sibling`; booking Vercel has `BOOKING_CONNECT_URL_BASE=https://www.chatiq.io/booking/connect`. Local ChatIQ also has `BOOKING_CONCIERGE=llm` (not required on Vercel for LINE if already set for this pilot path — confirm if prod LINE concierge misbehaves).
+
+**Minor known quirk (not blocking):** reschedule offer list can include the just-freed original slot (cancel-then-offer).
 
 **Already done (do not redo):**
 - Deploy: https://chatiq-booking.vercel.app/ — health `persistence: "supabase"`.
-- Supabase project `crxwmkegmrusndpocntu`; migrations applied (core + slot unique).
-- ChatIQ pilot: bot `booking-system-test-bot` (`ed98722d-bbad-485d-a187-c54b4429d544`), `BOOKING_RUNTIME=sibling`, allowlist, `booking_mode=full`.
-- Chat smoke: create → slots → confirm → `/admin`; lookup / create-guard / clarify verified.
-- Slot conflict: unique index + re-offer on clash; smoke `team-pilot` duplicate cancelled.
-- WS-E: command catalog + ChatIQ heuristics + canned→command map + cancel confirm + reschedule.
-- Chat-smoke 2026-10-21: cancel (confirm → cancelled, lookup empty) + reschedule (10:00 → 14:00) verified in DB via admin API: `2b8671b4` cancelled, `c13789f4` confirmed.
+- Supabase project `crxwmkegmrusndpocntu`; migrations applied (core + slot unique + identity).
+- ChatIQ pilot + LINE guide on allowlist; `booking_mode=full` on both.
+- Phases 1–2 smokes; Phase 3a API/concierge/consent; live LINE→web link + web post-merge lookup (2026-10-24).
 
 ## Decisions (locked)
 
@@ -45,6 +51,7 @@ Owner: Engineering
 | **Entry UX** | **Intent → typed command library** (not keyword canned as primary). Spec: [`booking-command-library.md`](./booking-command-library.md) |
 | **Interpretation (locked 2026-10-21)** | **LLM interprets (any language) and drives the sibling via one fixed typed command set; sibling is deterministic/monolingual internally and never parses natural language; customer never touches the sibling directly.** Heuristic regexes = fallback/shortcuts only, never extended per-language. Full design: [`booking-command-library.md`](./booking-command-library.md) |
 | **Admin (locked 2026-10-21)** | Same command bus, three interfaces: customer concierge (LLM), admin console (direct UI), admin copilot (LLM + human confirm-cards). Actor scope + audit on every command. |
+| **Catalog (locked 2026-10-24)** | Owner-configured, business-agnostic services + hours; shared calendar per bot in v1; 1–100 services via list/search. Spec: [`service-catalog-and-availability.md`](./service-catalog-and-availability.md). |
 
 ## 1) Why
 
@@ -86,10 +93,20 @@ Spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md). Do
 - [x] Migration: `connect_tokens` (hashed, one-time, 10-min), `identity_audit_log`, `contacts.merged_into`/status — applied 2026-10-23 via Supabase CLI (`db push`)
 - [x] `booking.create_connect_token` / `booking.redeem_connect_token` / `booking.get_customer`; merge is internal-only, deterministic survivor rule, tombstone + audit, `MERGE_CONFLICT` aborts safely
 - [x] API exit tests (no LLM): `npm run smoke:identity` **19/19 on Vercel** — happy-path merge unifies bookings from both sides; wrong code `TOKEN_INVALID`; reuse `TOKEN_USED`; expired (backdated) code `TOKEN_EXPIRED` (2026-10-23)
-- [ ] Channel smokes: LINE persistence (new conversation finds booking); LINE→web link (consent screen, fresh login); web→LINE short-code redemption in chat; post-merge lookup from **both** doors; both-channel "accounts linked" notification (notification not yet built)
+- [x] Channel smokes (partial, live 2026-10-24): LINE book on `chatiq-line-guide`; LINE→web consent merge; post-merge lookup from **web** `/chat/chatiq-line-guide` sees Tue 10:00 booking
+- [ ] Channel smokes (remaining): web→LINE short-code redemption in LINE chat; optional re-check LINE-door lookup / new LINE thread persistence; both-channel "accounts linked" notification (**not built**)
 - [x] Concierge linking conversation built + **live EN→TH smoke PASS 2026-10-24** (`chatiq/tests/booking-sibling-concierge-live.test.ts`; unit 12/12; sibling timeout raised for merge)
-- [x] Consent page built + **go-live 2026-10-24**: ChatIQ-hosted login-required `/booking/connect`; Vercel `BOOKING_CONNECT_URL_BASE` set; prod token returns `connect_url`; signed-out CTA verified. Signed-in merge click-through optional/remaining.
+- [x] Consent page built + **go-live 2026-10-24** + **signed-in Link-accounts PASS** (live LINE token)
 - [ ] Contact enrichment: LINE display-name snapshot; web name/email copied at redemption (display only)
+
+### Phase 3b.0 — Service catalog & availability (before / with admin console)
+
+Spec: [`service-catalog-and-availability.md`](./service-catalog-and-availability.md). Done when **an owner can configure 1–N services and business hours without code changes**, and customer availability honors those rules:
+
+- [x] Design locked 2026-10-24 (shared calendar v1; catalog fields; hours/exceptions/blocks; admin + search commands; concierge scaling)
+- [ ] Schema + admin commands + API smoke (no LLM): `catalog.*`, `availability.*`; `get_availability` uses hours; seed only when empty
+- [ ] `/admin` Services + Hours UI
+- [ ] Concierge `booking.search_services` + large-catalog prompt rules
 
 ### Phase 3b — Admin doors (same command bus)
 
@@ -102,7 +119,7 @@ Done when **human agents can run the same operations directly and via natural la
 
 ### Overall v1 DoD
 
-Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b console (copilot may trail). Legacy in-`chatiq` booking docs archived (done 2026-10-21); legacy code tagged `pre-booking-sibling-archive` and off hot paths (WS-D).
+Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b.0 catalog/hours + Phase 3b console (copilot may trail). Legacy in-`chatiq` booking docs archived (done 2026-10-21); legacy code tagged `pre-booking-sibling-archive` and off hot paths (WS-D).
 
 ## 3) Workstreams
 
@@ -126,14 +143,15 @@ Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b console (c
 
 ### WS-C — Identity & account linking (= Phase 3a; spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md))
 
-- [x] Resolve by conversation/LINE binding (claims → contact; LINE path untested on real LINE bot)
+- [x] Resolve by conversation/LINE binding (claims → contact; **live LINE bot verified 2026-10-24**)
 - [x] Migration: `connect_tokens`, `identity_audit_log`, `contacts.merged_into` (applied 2026-10-23)
 - [x] Connect token issue/redeem + internal merge (survivor rule, tombstone, audit, conflict abort)
-- [x] `booking.get_customer`; contact enrichment (LINE display name, web profile at redemption) ← enrichment pending
-- [x] API exit tests: `scripts/smoke-identity.mjs` **19/19 on Vercel** incl. backdated-token `TOKEN_EXPIRED` (2026-10-23; commands smoke still green)
-- [x] Concierge linking conversation: identity tools + prompt + consent gate; unit 12/12; **live EN→TH smoke PASS 2026-10-24** (`CONCIERGE_LIVE_SMOKE=1`)
-- [x] Consent page (ChatIQ-hosted, login-required per user decision 2026-10-23): `chatiq/src/app/(app)/booking/connect/` + `src/app/api/booking/connect/redeem/`; sibling `BOOKING_CONNECT_URL_BASE` set locally. Pending: Vercel env (`https://www.chatiq.io/booking/connect`) + e2e verify
-- [ ] Channel smokes: LINE persistence; LINE→web; web→LINE code; post-merge both-door lookup + **both-channel notifications (not built yet)**; admin unmerge lands in WS-H
+- [x] `booking.get_customer` (customer-scoped across bots); contact enrichment still pending
+- [x] API exit tests: `scripts/smoke-identity.mjs` incl. cross-bot full-token redeem + `TOKEN_EXPIRED`
+- [x] Concierge linking conversation: identity tools + prompt + consent gate; unit 12/12; **live EN→TH smoke PASS 2026-10-24**
+- [x] Consent page go-live + signed-in redeem PASS; `BOOKING_CONNECT_URL_BASE` on booking Vercel
+- [x] Channel: LINE book + LINE→web link + post-merge **web** lookup PASS (2026-10-24)
+- [ ] Channel: web→LINE short-code; both-channel link notifications; admin unmerge lands in WS-H
 
 ### WS-D — Archive legacy
 
@@ -167,13 +185,57 @@ Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b console (c
 - [x] Smoke: EN / TH / ZH full flows + next-month + returned-slots-only (2026-10-21, DB-verified)
 - [x] Identity tools in concierge (create/redeem connect token, get_customer) + linking prompt rules + deterministic consent gate (2026-10-23); live linking smoke harness committed, run pending valid OpenAI key
 
-### WS-H — Phase 3b: admin doors
+### WS-H — Phase 3b.0 catalog + Phase 3b admin doors
 
+- [x] **3b.0 design locked** — [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) (2026-10-24); **schema/UI deferred until Phase 3a leftovers**
+- [ ] 3b.0 implement: catalog/hours schema + admin commands + Services/Hours UI + `search_services`
 - [ ] `/admin` console: calendar/table, detail command buttons, filters; customer detail (channel accounts, identity audit, unmerge)
 - [ ] Commands reference + ⌘K palette; actor scopes; audit log
 - [ ] Copilot: NL → confirm-card → execute; customer notification on admin changes
 
 ## 4) Progress Log
+
+### 2026-10-24 — Service catalog & availability design locked (Phase 3b.0)
+
+**What changed (docs only — no schema/UI)**
+- New locked spec: [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) — business-agnostic 1–100 services; shared calendar v1; hours/exceptions/blocks; admin `catalog.*` / `availability.*`; concierge `search_services` for large catalogs.
+- Wired into mission Resume (step 4 = 3b.0 after 3a leftovers), Phase 3b.0 DoD, WS-H, Decisions table, docs README, command-library, workspace ROADMAP + AGENTS.
+
+**Explicitly deferred:** migrations, admin UI, availability rewrite — finish Phase 3a (web→LINE, notifications, enrichment) first.
+
+**Approx. toward DoD:** Phase 3a still **~90%** (unchanged); Phase 3b.0 design **done / impl 0%**.
+
+```text
+chatiq-booking: Phase 3a (identity):     [##################__] ~90% -> DoD
+chatiq-booking: Phase 3b.0 (catalog):    [####________________] ~20% -> DoD (design only)
+```
+
+**Next session still:** web→LINE short-code smoke (not catalog impl).
+
+### 2026-10-24 (EOD) — Live LINE↔web link works; post-merge web lookup PASS; handoff
+
+**Verified today (prod)**
+- LINE (`chatiq-line-guide`) booked Consultation **Tue 27 Oct 2026 10:00** Bangkok.
+- Allowlist widened: `BOOKING_SIBLING_BOT_IDS=ed98722d-…,c967a5c0-…` (local + ChatIQ Vercel); LINE bot `booking_mode=full`.
+- Consent link redeem PASS after cross-bot token fix (`chatiq-booking` `34b8d9b`): full URL token may redeem when request bot_id is allowlist[0] ≠ issuing bot.
+- Post-merge web “do I have any bookings?” on https://www.chatiq.io/chat/chatiq-line-guide → **sees the LINE booking** after:
+  - `chatiq` `b03fea75` — session `web_user` attached before bot lookup on dashboard chat
+  - `chatiq-booking` `2a81fb3` — prefer `web_user`/`line` over `chatiq_conversation`; customer-scoped upcoming/`get_existing`
+
+**Not done (tomorrow, in order)**
+1. web→LINE short-code redemption smoke  
+2. Build both-channel “accounts linked” notifications  
+3. Contact enrichment  
+4. Then Phase 3b.0 catalog/hours **implementation** (design already locked) → Phase 3b admin console  
+
+**Approx. toward DoD:** Phase 3a **~90%**.
+
+```text
+chatiq-booking: Phase 3a (identity): [##################__] ~90% -> DoD
+chatiq:         Phase 3a surfaces:   [##################__] ~90% -> DoD
+```
+
+**Tomorrow first action:** web→LINE — issue code on web (signed-in), redeem 6-digit code in LINE OA, confirm lookup both doors.
 
 ### 2026-10-24 — Post-merge web lookup miss: session userId never reached sibling
 
