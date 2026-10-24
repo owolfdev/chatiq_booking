@@ -1,9 +1,33 @@
-/** Simple pilot availability: next weekdays at 10:00 and 14:00 in the session timezone. */
+/**
+ * Deterministic slot search for appointments shape.
+ * Spec: service-catalog-and-availability.md §5.4
+ */
 
 export type OfferSlot = {
   index: number;
   starts_at: string; // ISO UTC
   label: string; // human label in local tz
+};
+
+export type TimeOfDay = "morning" | "afternoon" | "evening" | "any";
+
+export type LocalWindow = { start_local: string; end_local: string };
+
+export type HoursTemplateDay = {
+  weekday: number; // 0=Sun … 6=Sat
+  windows: LocalWindow[];
+};
+
+export type DateException = {
+  on_date: string; // YYYY-MM-DD
+  closed: boolean;
+  start_local?: string | null;
+  end_local?: string | null;
+};
+
+export type BusyInterval = {
+  starts_at: string;
+  ends_at: string;
 };
 
 function formatInTimeZone(date: Date, timeZone: string): string {
@@ -19,7 +43,7 @@ function formatInTimeZone(date: Date, timeZone: string): string {
 }
 
 /** Local calendar parts in a timezone. */
-function zonedParts(date: Date, timeZone: string) {
+export function zonedParts(date: Date, timeZone: string) {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone,
     year: "numeric",
@@ -42,8 +66,18 @@ function zonedParts(date: Date, timeZone: string) {
   };
 }
 
-/** Approximate UTC instant for local Y-M-D H:M in a timezone (good enough for pilot). */
-function localWallToUtc(
+const WEEKDAY_TO_INDEX: Record<string, number> = {
+  Sun: 0,
+  Mon: 1,
+  Tue: 2,
+  Wed: 3,
+  Thu: 4,
+  Fri: 5,
+  Sat: 6,
+};
+
+/** Approximate UTC instant for local Y-M-D H:M in a timezone. */
+export function localWallToUtc(
   year: number,
   month: number,
   day: number,
@@ -51,7 +85,6 @@ function localWallToUtc(
   minute: number,
   timeZone: string
 ): Date {
-  // Iterate from a UTC guess using the offset implied by formatting.
   let guess = new Date(Date.UTC(year, month - 1, day, hour, minute, 0));
   for (let i = 0; i < 3; i++) {
     const p = zonedParts(guess, timeZone);
@@ -71,69 +104,15 @@ function addDays(year: number, month: number, day: number, delta: number) {
   };
 }
 
-const WEEKEND = new Set(["Sat", "Sun"]);
-
-export function generateOfferSlots(params: {
-  timeZone: string;
-  now?: Date;
-  count?: number;
-  takenStarts?: Set<string>;
-}): OfferSlot[] {
-  const timeZone = params.timeZone || "Asia/Bangkok";
-  const now = params.now ?? new Date();
-  const count = params.count ?? 3;
-  const taken = params.takenStarts ?? new Set<string>();
-  const nowParts = zonedParts(now, timeZone);
-
-  const slots: OfferSlot[] = [];
-  let dayOffset = 0;
-
-  while (slots.length < count && dayOffset < 21) {
-    const day = addDays(nowParts.year, nowParts.month, nowParts.day, dayOffset);
-    const probe = localWallToUtc(day.year, day.month, day.day, 12, 0, timeZone);
-    const weekday = zonedParts(probe, timeZone).weekday;
-    if (!WEEKEND.has(weekday)) {
-      for (const hour of [10, 14]) {
-        if (slots.length >= count) break;
-        const starts = localWallToUtc(
-          day.year,
-          day.month,
-          day.day,
-          hour,
-          0,
-          timeZone
-        );
-        if (starts.getTime() <= now.getTime() + 60 * 60 * 1000) continue;
-        const iso = starts.toISOString();
-        if (taken.has(iso)) continue;
-        slots.push({
-          index: slots.length + 1,
-          starts_at: iso,
-          label: formatInTimeZone(starts, timeZone),
-        });
-      }
-    }
-    dayOffset += 1;
-  }
-
-  return slots;
+function ymd(year: number, month: number, day: number): string {
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
-export type TimeOfDay = "morning" | "afternoon" | "evening" | "any";
-
-export function normalizeTimeOfDay(value: unknown): TimeOfDay {
-  return value === "morning" || value === "afternoon" || value === "evening"
-    ? value
-    : "any";
+function parseTimeToMinutes(value: string): number {
+  const m = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(value.trim());
+  if (!m) return -1;
+  return Number(m[1]) * 60 + Number(m[2]);
 }
-
-/** Pilot schedule hours (local) per time-of-day bucket. */
-const TIME_OF_DAY_HOURS: Record<TimeOfDay, number[]> = {
-  morning: [10],
-  afternoon: [14],
-  evening: [],
-  any: [10, 14],
-};
 
 function parseWindowDay(
   value: string | undefined,
@@ -171,50 +150,201 @@ function dayDiff(
   );
 }
 
+export function normalizeTimeOfDay(value: unknown): TimeOfDay {
+  return value === "morning" || value === "afternoon" || value === "evening"
+    ? value
+    : "any";
+}
+
+function matchesTimeOfDay(hour: number, timeOfDay: TimeOfDay): boolean {
+  if (timeOfDay === "any") return true;
+  if (timeOfDay === "morning") return hour >= 5 && hour < 12;
+  if (timeOfDay === "afternoon") return hour >= 12 && hour < 17;
+  if (timeOfDay === "evening") return hour >= 17 && hour < 22;
+  return true;
+}
+
+function intervalsOverlap(
+  aStart: number,
+  aEnd: number,
+  bStart: number,
+  bEnd: number
+): boolean {
+  return aStart < bEnd && bStart < aEnd;
+}
+
 /**
- * Filterable availability for the commands API: explicit local date window +
- * optional time-of-day, future slots only, taken slots excluded.
- * Returns at most `count` (clamped 1–5) slots; empty array is a valid result.
+ * Filterable availability: weekly hours ∩ exceptions − blocks − capacity,
+ * grid by slot_step, duration + buffers, min_notice, horizon. Max `count` (1–5).
  */
 export function searchAvailability(params: {
   timeZone: string;
   now?: Date;
   count?: number;
-  takenStarts?: Set<string>;
   dateFrom?: string;
   dateTo?: string;
   timeOfDay?: TimeOfDay;
+  /** Weekly template; empty → no open slots (fail closed). */
+  hoursByWeekday: Map<number, LocalWindow[]>;
+  exceptions?: DateException[];
+  blocks?: BusyInterval[];
+  /** Existing bookings as occupied intervals (including buffers already applied by caller). */
+  occupied?: BusyInterval[];
+  durationMinutes: number;
+  bufferBeforeMinutes?: number;
+  bufferAfterMinutes?: number;
+  capacity?: number;
+  slotStepMinutes?: number;
+  minNoticeMinutes?: number;
+  bookingHorizonDays?: number;
 }): OfferSlot[] {
   const timeZone = params.timeZone || "Asia/Bangkok";
   const now = params.now ?? new Date();
   const count = Math.min(5, Math.max(1, params.count ?? 3));
-  const taken = params.takenStarts ?? new Set<string>();
-  const hours = TIME_OF_DAY_HOURS[params.timeOfDay ?? "any"];
+  const duration = Math.max(1, params.durationMinutes);
+  const bufferBefore = Math.max(0, params.bufferBeforeMinutes ?? 0);
+  const bufferAfter = Math.max(0, params.bufferAfterMinutes ?? 0);
+  const capacity = Math.max(1, params.capacity ?? 1);
+  const step = Math.max(5, params.slotStepMinutes ?? 30);
+  const minNotice = Math.max(0, params.minNoticeMinutes ?? 60);
+  const horizonDays = Math.max(1, params.bookingHorizonDays ?? 60);
+  const timeOfDay = params.timeOfDay ?? "any";
+
+  const exceptionByDate = new Map(
+    (params.exceptions ?? []).map((e) => [e.on_date, e])
+  );
+  const blocks = params.blocks ?? [];
+  const occupied = params.occupied ?? [];
+
+  const earliest = now.getTime() + minNotice * 60_000;
+  const horizonEnd = now.getTime() + horizonDays * 86_400_000;
 
   const startDay = parseWindowDay(params.dateFrom, timeZone, now);
-  const defaultEnd = new Date(now.getTime() + 7 * 86_400_000);
+  const defaultEnd = new Date(
+    Math.min(horizonEnd, now.getTime() + 7 * 86_400_000)
+  );
   const endDay = parseWindowDay(params.dateTo, timeZone, defaultEnd);
   const totalDays = Math.min(62, Math.max(0, dayDiff(startDay, endDay)));
 
   const slots: OfferSlot[] = [];
+
   for (let offset = 0; offset <= totalDays && slots.length < count; offset++) {
     const day = addDays(startDay.year, startDay.month, startDay.day, offset);
+    const dateKey = ymd(day.year, day.month, day.day);
     const probe = localWallToUtc(day.year, day.month, day.day, 12, 0, timeZone);
-    if (WEEKEND.has(zonedParts(probe, timeZone).weekday)) continue;
-    for (const hour of hours) {
-      if (slots.length >= count) break;
-      const starts = localWallToUtc(day.year, day.month, day.day, hour, 0, timeZone);
-      if (starts.getTime() <= now.getTime() + 60 * 60 * 1000) continue;
-      const iso = starts.toISOString();
-      if (taken.has(iso)) continue;
-      slots.push({
-        index: slots.length + 1,
-        starts_at: iso,
-        label: formatInTimeZone(starts, timeZone),
-      });
+    const weekdayName = zonedParts(probe, timeZone).weekday;
+    const weekday = WEEKDAY_TO_INDEX[weekdayName] ?? 0;
+
+    const exception = exceptionByDate.get(dateKey);
+    let windows: LocalWindow[] = [];
+    if (exception) {
+      if (exception.closed) continue;
+      if (exception.start_local && exception.end_local) {
+        windows = [
+          {
+            start_local: exception.start_local,
+            end_local: exception.end_local,
+          },
+        ];
+      }
+    } else {
+      windows = params.hoursByWeekday.get(weekday) ?? [];
+    }
+    if (windows.length === 0) continue;
+
+    for (const window of windows) {
+      const startMin = parseTimeToMinutes(window.start_local);
+      const endMin = parseTimeToMinutes(window.end_local);
+      if (startMin < 0 || endMin <= startMin) continue;
+
+      for (let minuteOfDay = startMin; minuteOfDay + duration <= endMin; minuteOfDay += step) {
+        if (slots.length >= count) break;
+        const hour = Math.floor(minuteOfDay / 60);
+        const minute = minuteOfDay % 60;
+        if (!matchesTimeOfDay(hour, timeOfDay)) continue;
+
+        const starts = localWallToUtc(
+          day.year,
+          day.month,
+          day.day,
+          hour,
+          minute,
+          timeZone
+        );
+        const startsMs = starts.getTime();
+        if (startsMs < earliest || startsMs > horizonEnd) continue;
+
+        const serviceStart = startsMs;
+        const serviceEnd = startsMs + duration * 60_000;
+        const blockStart = serviceStart - bufferBefore * 60_000;
+        const blockEnd = serviceEnd + bufferAfter * 60_000;
+
+        const blocked = blocks.some((b) =>
+          intervalsOverlap(
+            blockStart,
+            blockEnd,
+            new Date(b.starts_at).getTime(),
+            new Date(b.ends_at).getTime()
+          )
+        );
+        if (blocked) continue;
+
+        const overlapping = occupied.filter((o) =>
+          intervalsOverlap(
+            blockStart,
+            blockEnd,
+            new Date(o.starts_at).getTime(),
+            new Date(o.ends_at).getTime()
+          )
+        ).length;
+        if (overlapping >= capacity) continue;
+
+        slots.push({
+          index: slots.length + 1,
+          starts_at: starts.toISOString(),
+          label: formatInTimeZone(starts, timeZone),
+        });
+      }
     }
   }
+
   return slots;
+}
+
+/** Build weekday → windows map from flat hour rows. */
+export function groupHoursByWeekday(
+  rows: Array<{ weekday: number; start_local: string; end_local: string }>
+): Map<number, LocalWindow[]> {
+  const map = new Map<number, LocalWindow[]>();
+  for (const row of rows) {
+    const list = map.get(row.weekday) ?? [];
+    list.push({ start_local: row.start_local, end_local: row.end_local });
+    map.set(row.weekday, list);
+  }
+  return map;
+}
+
+/** Turn-handler helper: next open slots using hours template. */
+export function generateOfferSlots(params: {
+  timeZone: string;
+  now?: Date;
+  count?: number;
+  hoursByWeekday: Map<number, LocalWindow[]>;
+  occupied?: BusyInterval[];
+  durationMinutes?: number;
+  minNoticeMinutes?: number;
+}): OfferSlot[] {
+  return searchAvailability({
+    timeZone: params.timeZone,
+    now: params.now,
+    count: params.count ?? 3,
+    hoursByWeekday: params.hoursByWeekday,
+    occupied: params.occupied,
+    durationMinutes: params.durationMinutes ?? 30,
+    minNoticeMinutes: params.minNoticeMinutes ?? 60,
+    bookingHorizonDays: 21,
+    slotStepMinutes: 30,
+  });
 }
 
 export function formatSlotList(slots: OfferSlot[]): string {
@@ -236,7 +366,6 @@ export function matchSlotChoice(
   const lower = trimmed.toLowerCase();
   for (const slot of slots) {
     if (lower.includes(slot.label.toLowerCase())) return slot;
-    // match ISO date fragment
     if (lower.includes(slot.starts_at.slice(0, 10))) return slot;
   }
   return null;

@@ -108,8 +108,13 @@ try {
     limit: 5,
   });
   check(
-    "morning filter -> only 10:00 local slots",
-    morning.json.ok && (morning.json.data?.slots ?? []).every((s) => hourInTz(s.starts_at) === 10),
+    "morning filter -> local hours in [5,12)",
+    morning.json.ok &&
+      (morning.json.data?.slots?.length ?? 0) > 0 &&
+      (morning.json.data?.slots ?? []).every((s) => {
+        const h = hourInTz(s.starts_at);
+        return h >= 5 && h < 12;
+      }),
     JSON.stringify(morning.json.data?.slots)
   );
 
@@ -118,9 +123,11 @@ try {
     time_of_day: "evening",
     limit: 5,
   });
+  // Default hours end 17:00 — evening bucket [17,22) usually empty (success).
   check(
-    "evening filter -> no pilot slots (not an error)",
-    evening.json.ok && (evening.json.data?.slots?.length ?? -1) === 0
+    "evening filter -> ok (often empty under 09–17 hours)",
+    evening.json.ok === true,
+    JSON.stringify(evening.json.data?.slots)
   );
 
   const pastWindow = await exec("booking.get_availability", {

@@ -11,8 +11,11 @@ Owner: Engineering
 1. ~~**Phase 1 — Tool-ready sibling**~~ ✅ **DONE 2026-10-21** (see WS-F; smoke 20/20 locally + on Vercel).
 2. ~~**Phase 2 — LLM concierge**~~ ✅ **DONE 2026-10-21** (live-smoked EN/TH/ZH, see Progress Log). Enabled by `BOOKING_CONCIERGE=llm` (set in local `chatiq/.env.local`; add to Vercel env when deploying concierge to prod chat).
 3. ~~**Phase 3a — Identity & account linking**~~ ✅ **DONE 2026-10-25** (spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md)): both-direction links, tripwire delivery (LINE+web `sent`), enrichment, keepalive cron. Pilot pair already linked — tripwire re-proven via `npx tsx scripts/smoke-link-notify.ts` (forces notify path; redeem skips when `already_linked`).
-4. **Phase 3b.0 — Service catalog & hours** — **← START HERE** (design locked): [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) — owner CRUD for 1–100 services, hours/blocks, `search_services`, shared calendar v1. Constrained by [`base-and-shape-modules.md`](./base-and-shape-modules.md) (appointments shape; don’t encode staff as fake services; leave room for `resource_id` / `ends_at`).
-5. **Phase 3b — Admin doors**: console (calendar/table, command buttons, ⌘K, commands reference, audit incl. identity audit + unmerge) → copilot with confirm-cards. Services/Hours UI is part of this console (3b.0 first).
+4. **Phase 3b.0 — Service catalog & hours** — **← CONTINUE** ([`service-catalog-and-availability.md`](./service-catalog-and-availability.md)):
+   - ~~Schema + admin commands + API smoke~~ ✅ **2026-10-25** (`npm run smoke:catalog` PASS; migration applied).
+   - **Next:** Admin UI Services + Hours under `/admin`.
+   - Then: concierge `search_services` prompt rules for large catalogs (command already live).
+5. **Phase 3b — Admin doors**: console (calendar/table, command buttons, ⌘K, commands reference, audit incl. identity audit + unmerge) → copilot with confirm-cards.
 6. Later shapes — **`resources`** (clinic any/specific clinician), then **`stays`** (hotel nights) — modules doc. Not separate apps.
 7. Parallel/later — widen `BOOKING_SIBLING_BOT_IDS` per added bot (smoke each); WS-D code archive of legacy engine (docs already archived 2026-10-21); payments; add `BOOKING_CONCIERGE=llm` to ChatIQ Vercel env when concierge goes to prod.
 
@@ -103,9 +106,9 @@ Spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md). Do
 Spec: [`service-catalog-and-availability.md`](./service-catalog-and-availability.md). Done when **an owner can configure 1–N services and business hours without code changes**, and customer availability honors those rules:
 
 - [x] Design locked 2026-10-24 (shared calendar v1; catalog fields; hours/exceptions/blocks; admin + search commands; concierge scaling)
-- [ ] Schema + admin commands + API smoke (no LLM): `catalog.*`, `availability.*`; `get_availability` uses hours; seed only when empty
+- [x] Schema + admin commands + API smoke (no LLM): `catalog.*`, `availability.*`; hours-aware `get_availability`; seed Consultation/default hours only when empty — 2026-10-25
 - [ ] `/admin` Services + Hours UI
-- [ ] Concierge `booking.search_services` + large-catalog prompt rules
+- [ ] Concierge large-catalog prompt rules (`booking.search_services` command already live)
 
 ### Phase 3b — Admin doors (same command bus)
 
@@ -188,12 +191,29 @@ Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b.0 catalog/
 ### WS-H — Phase 3b.0 catalog + Phase 3b admin doors
 
 - [x] **3b.0 design locked** — [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) (2026-10-24); **schema/UI deferred until Phase 3a leftovers**
-- [ ] 3b.0 implement: catalog/hours schema + admin commands + Services/Hours UI + `search_services`
+- [x] 3b.0 schema + admin commands + `search_services` + smoke (2026-10-25)
+- [ ] 3b.0 Services/Hours admin UI
 - [ ] `/admin` console: calendar/table, detail command buttons, filters; customer detail (channel accounts, identity audit, unmerge)
 - [ ] Commands reference + ⌘K palette; actor scopes; audit log
 - [ ] Copilot: NL → confirm-card → execute; customer notification on admin changes
 
 ## 4) Progress Log
+
+### 2026-10-25 — Phase 3b.0 schema + commands (slice 1)
+
+**What changed**
+- Migration `20261025000001_catalog_and_hours.sql` applied: catalog additive columns, `bot_booking_settings`, hours/exceptions/blocks; dropped bot-wide unique start index (capacity-aware conflicts).
+- Admin commands: `catalog.upsert_service|set_active|reorder`, `availability.set_hours|set_exception|block|unblock|get_schedule` (staff/system only).
+- Customer: `booking.search_services`; `get_availability` uses weekly hours + exceptions + blocks + buffers/capacity/min notice.
+- Smokes: `npm run smoke:catalog` **PASS**; `smoke:commands` updated for morning grid + **PASS**.
+
+**Approx. toward DoD:** Phase 3b.0 **~55%** (schema/commands done; UI + concierge prompt rules left).
+
+```text
+chatiq-booking: Phase 3b.0 (catalog/hours): [###########_________] ~55% -> DoD
+```
+
+**Next:** `/admin` Services + Hours UI.
 
 ### 2026-10-25 — Phase 3a CLOSED
 

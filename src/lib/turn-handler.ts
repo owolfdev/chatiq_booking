@@ -3,6 +3,7 @@ import {
   encodeOfferedSlots,
   formatSlotList,
   generateOfferSlots,
+  groupHoursByWeekday,
   matchSlotChoice,
 } from "@/lib/availability";
 import { resolveBookingCommand } from "@/lib/commands";
@@ -13,13 +14,14 @@ import {
 } from "@/lib/contract";
 import { handleMockTurn } from "@/lib/mock/turn-handler";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { ensureDefaultHoursIfEmpty, listHours } from "@/lib/supabase/hours";
 import {
   cancelBooking,
   createBooking,
   ensurePilotCatalogItem,
   getLatestOpenBooking,
   getOrCreateSession,
-  listTakenStarts,
+  listOccupiedIntervals,
   probeSupabasePersistence,
   resolveOrCreateContact,
   SlotConflictError,
@@ -69,13 +71,23 @@ async function offerCreateSlots(params: {
   selection: unknown;
   uiExtra?: Record<string, unknown>;
 }): Promise<BookingTurnResponse> {
-  const taken = await listTakenStarts({
+  await ensureDefaultHoursIfEmpty({
+    team_id: params.team_id,
+    bot_id: params.bot_id,
+  });
+  const hourRows = await listHours({
+    team_id: params.team_id,
+    bot_id: params.bot_id,
+  });
+  const occupied = await listOccupiedIntervals({
     team_id: params.team_id,
     bot_id: params.bot_id,
   });
   const slots = generateOfferSlots({
     timeZone: params.timezone,
-    takenStarts: taken,
+    hoursByWeekday: groupHoursByWeekday(hourRows),
+    occupied,
+    durationMinutes: 30,
   });
   if (slots.length === 0) {
     return okReply({

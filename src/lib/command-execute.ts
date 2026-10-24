@@ -6,6 +6,7 @@
  * or a smoke script) renders language. See booking-command-library.md.
  */
 import {
+  groupHoursByWeekday,
   normalizeTimeOfDay,
   searchAvailability,
 } from "@/lib/availability";
@@ -15,6 +16,24 @@ import {
   type BookingCommandExecuteResponse,
 } from "@/lib/contract";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import {
+  reorderCatalogServices,
+  searchCatalogServices,
+  setCatalogServiceActive,
+  upsertCatalogService,
+} from "@/lib/supabase/catalog";
+import {
+  addBlock,
+  ensureDefaultHoursIfEmpty,
+  getBotBookingSettings,
+  listBlocks,
+  listExceptions,
+  listHours,
+  removeBlock,
+  setException,
+  setHours,
+  upsertBotBookingSettings,
+} from "@/lib/supabase/hours";
 import {
   createConnectToken,
   getCustomerProfile,
@@ -30,7 +49,7 @@ import {
   getLatestOpenBooking,
   getOrCreateSession,
   listCatalogItems,
-  listTakenStarts,
+  listOccupiedIntervals,
   resolveOrCreateContact,
   SlotConflictError,
   type DbCatalogItem,
@@ -40,6 +59,7 @@ const DEFAULT_TZ = "Asia/Bangkok";
 
 const EXECUTABLE_COMMANDS = new Set([
   "booking.list_services",
+  "booking.search_services",
   "booking.get_existing",
   "booking.get_availability",
   "booking.create",
@@ -48,6 +68,14 @@ const EXECUTABLE_COMMANDS = new Set([
   "booking.create_connect_token",
   "booking.redeem_connect_token",
   "booking.get_customer",
+  "catalog.upsert_service",
+  "catalog.set_active",
+  "catalog.reorder",
+  "availability.set_hours",
+  "availability.set_exception",
+  "availability.block",
+  "availability.unblock",
+  "availability.get_schedule",
 ]);
 
 type Slots = Record<string, unknown>;
@@ -163,6 +191,35 @@ export async function executeBookingCommand(
           slug: i.slug,
           title: i.title,
           duration_minutes: i.duration_minutes,
+          category: i.category ?? null,
+          sort_order: i.sort_order ?? 0,
+          description: i.description ?? null,
+          price_cents: i.price_cents ?? null,
+          currency: i.currency ?? null,
+        })),
+        timezone,
+      });
+    }
+
+    if (command === "booking.search_services") {
+      const found = await searchCatalogServices({
+        team_id,
+        bot_id,
+        query: str(slots, "query", "q", "keyword"),
+        category: str(slots, "category"),
+        limit:
+          typeof slots.limit === "number" && Number.isFinite(slots.limit)
+            ? slots.limit
+            : undefined,
+      });
+      return ok(command, {
+        services: found.map((i) => ({
+          id: i.id,
+          slug: i.slug,
+          title: i.title,
+          duration_minutes: i.duration_minutes,
+          category: i.category,
+          sort_order: i.sort_order,
         })),
         timezone,
       });
@@ -171,13 +228,44 @@ export async function executeBookingCommand(
     if (command === "booking.get_availability") {
       const svc = resolveService(items, slots);
       if ("error" in svc) return { ...svc.error, command };
-      const taken = await listTakenStarts({ team_id, bot_id });
+      await ensureDefaultHoursIfEmpty({ team_id, bot_id });
+      const settings = await getBotBookingSettings({ team_id, bot_id });
+      const tz = settings.timezone || timezone;
+      const hourRows = await listHours({ team_id, bot_id });
+      const hoursByWeekday = groupHoursByWeekday(hourRows);
+      const dateFrom = str(slots, "date_from", "from") ?? undefined;
+      const dateTo = str(slots, "date_to", "to") ?? undefined;
+      const exceptions = await listExceptions({
+        team_id,
+        bot_id,
+        from_date: dateFrom,
+        to_date: dateTo,
+      });
+      const blocks = await listBlocks({
+        team_id,
+        bot_id,
+        from: dateFrom,
+        to: dateTo,
+      });
+      const occupied = await listOccupiedIntervals({ team_id, bot_id });
       const limitRaw = slots.limit;
       const found = searchAvailability({
-        timeZone: timezone,
-        takenStarts: taken,
-        dateFrom: str(slots, "date_from", "from") ?? undefined,
-        dateTo: str(slots, "date_to", "to") ?? undefined,
+        timeZone: tz,
+        hoursByWeekday,
+        exceptions,
+        blocks,
+        occupied,
+        durationMinutes: svc.item.duration_minutes,
+        bufferBeforeMinutes: svc.item.buffer_before_minutes ?? 0,
+        bufferAfterMinutes: svc.item.buffer_after_minutes ?? 0,
+        capacity: svc.item.capacity ?? 1,
+        slotStepMinutes: settings.slot_step_minutes,
+        minNoticeMinutes:
+          svc.item.min_notice_minutes ?? settings.min_notice_minutes,
+        bookingHorizonDays:
+          svc.item.booking_horizon_days ?? settings.booking_horizon_days,
+        dateFrom,
+        dateTo,
         timeOfDay: normalizeTimeOfDay(slots.time_of_day),
         count:
           typeof limitRaw === "number" && Number.isFinite(limitRaw)
@@ -189,14 +277,235 @@ export async function executeBookingCommand(
           id: svc.item.id,
           slug: svc.item.slug,
           title: svc.item.title,
+          duration_minutes: svc.item.duration_minutes,
         },
         slots: found.map((s) => ({
           starts_at: s.starts_at,
           label: s.label,
-          timezone,
+          timezone: tz,
         })),
-        timezone,
+        timezone: tz,
       });
+    }
+
+    // --- Admin catalog / hours (staff only; no customer identity) ---
+    if (command.startsWith("catalog.") || command.startsWith("availability.")) {
+      if (!isStaff && actor.type !== "system") {
+        return fail(command, "FORBIDDEN", "Admin actor required");
+      }
+
+      if (command === "catalog.upsert_service") {
+        const title = str(slots, "title");
+        const durationRaw = slots.duration_minutes;
+        const duration =
+          typeof durationRaw === "number"
+            ? durationRaw
+            : Number(str(slots, "duration_minutes"));
+        if (!title || !Number.isFinite(duration)) {
+          return fail(
+            command,
+            "INVALID_REQUEST",
+            "title and duration_minutes are required"
+          );
+        }
+        try {
+          const service = await upsertCatalogService({
+            team_id,
+            bot_id,
+            id: str(slots, "id", "service_id"),
+            slug: str(slots, "slug"),
+            title,
+            duration_minutes: duration,
+            description: str(slots, "description"),
+            category: str(slots, "category"),
+            sort_order:
+              typeof slots.sort_order === "number" ? slots.sort_order : undefined,
+            buffer_before_minutes:
+              typeof slots.buffer_before_minutes === "number"
+                ? slots.buffer_before_minutes
+                : undefined,
+            buffer_after_minutes:
+              typeof slots.buffer_after_minutes === "number"
+                ? slots.buffer_after_minutes
+                : undefined,
+            capacity:
+              typeof slots.capacity === "number" ? slots.capacity : undefined,
+            price_cents:
+              typeof slots.price_cents === "number" ? slots.price_cents : null,
+            currency: str(slots, "currency"),
+            booking_horizon_days:
+              typeof slots.booking_horizon_days === "number"
+                ? slots.booking_horizon_days
+                : undefined,
+            min_notice_minutes:
+              typeof slots.min_notice_minutes === "number"
+                ? slots.min_notice_minutes
+                : undefined,
+            active:
+              typeof slots.active === "boolean" ? slots.active : undefined,
+          });
+          return ok(command, { service });
+        } catch (err) {
+          return fail(
+            command,
+            "INVALID_REQUEST",
+            err instanceof Error ? err.message : "upsert failed"
+          );
+        }
+      }
+
+      if (command === "catalog.set_active") {
+        const idOrSlug = str(slots, "id", "service_id", "slug", "service_slug");
+        if (!idOrSlug || typeof slots.active !== "boolean") {
+          return fail(
+            command,
+            "INVALID_REQUEST",
+            "id/slug and active (boolean) are required"
+          );
+        }
+        try {
+          const service = await setCatalogServiceActive({
+            team_id,
+            bot_id,
+            id_or_slug: idOrSlug,
+            active: slots.active,
+          });
+          return ok(command, { service });
+        } catch {
+          return fail(command, "SERVICE_NOT_FOUND", `Unknown service: ${idOrSlug}`);
+        }
+      }
+
+      if (command === "catalog.reorder") {
+        const ordered = slots.ordered_ids;
+        if (!Array.isArray(ordered) || ordered.length === 0) {
+          return fail(command, "INVALID_REQUEST", "ordered_ids array is required");
+        }
+        const services = await reorderCatalogServices({
+          team_id,
+          bot_id,
+          ordered_ids: ordered.map(String),
+        });
+        return ok(command, { services });
+      }
+
+      if (command === "availability.set_hours") {
+        const hoursRaw = slots.hours;
+        if (!Array.isArray(hoursRaw)) {
+          return fail(
+            command,
+            "INVALID_REQUEST",
+            "hours array is required (use [] to clear)"
+          );
+        }
+        try {
+          const hours = await setHours({
+            team_id,
+            bot_id,
+            hours: hoursRaw.map((h) => {
+              const row = h as Record<string, unknown>;
+              return {
+                weekday: Number(row.weekday),
+                start_local: String(row.start_local ?? row.start),
+                end_local: String(row.end_local ?? row.end),
+              };
+            }),
+          });
+          if (typeof slots.timezone === "string" && slots.timezone.trim()) {
+            await upsertBotBookingSettings({
+              team_id,
+              bot_id,
+              timezone: slots.timezone.trim(),
+            });
+          }
+          return ok(command, { hours });
+        } catch (err) {
+          return fail(
+            command,
+            "INVALID_REQUEST",
+            err instanceof Error ? err.message : "set_hours failed"
+          );
+        }
+      }
+
+      if (command === "availability.set_exception") {
+        const onDate = str(slots, "on_date", "date");
+        if (!onDate) {
+          return fail(command, "INVALID_REQUEST", "on_date is required");
+        }
+        try {
+          const exception = await setException({
+            team_id,
+            bot_id,
+            on_date: onDate,
+            closed: slots.closed !== false,
+            start_local: str(slots, "start_local", "start"),
+            end_local: str(slots, "end_local", "end"),
+            note: str(slots, "note"),
+          });
+          return ok(command, { exception });
+        } catch (err) {
+          return fail(
+            command,
+            "INVALID_REQUEST",
+            err instanceof Error ? err.message : "set_exception failed"
+          );
+        }
+      }
+
+      if (command === "availability.block") {
+        const startsAt = str(slots, "starts_at", "start");
+        const endsAt = str(slots, "ends_at", "end");
+        if (!startsAt || !endsAt) {
+          return fail(
+            command,
+            "INVALID_REQUEST",
+            "starts_at and ends_at are required"
+          );
+        }
+        try {
+          const block = await addBlock({
+            team_id,
+            bot_id,
+            starts_at: startsAt,
+            ends_at: endsAt,
+            reason: str(slots, "reason"),
+          });
+          return ok(command, { block });
+        } catch (err) {
+          return fail(
+            command,
+            "INVALID_REQUEST",
+            err instanceof Error ? err.message : "block failed"
+          );
+        }
+      }
+
+      if (command === "availability.unblock") {
+        const blockId = str(slots, "block_id", "id");
+        if (!blockId) {
+          return fail(command, "INVALID_REQUEST", "block_id is required");
+        }
+        const removed = await removeBlock({
+          team_id,
+          bot_id,
+          block_id: blockId,
+        });
+        if (!removed) {
+          return fail(command, "NOT_FOUND", `Unknown block: ${blockId}`);
+        }
+        return ok(command, { removed: true, block_id: blockId });
+      }
+
+      if (command === "availability.get_schedule") {
+        const settings = await getBotBookingSettings({ team_id, bot_id });
+        const hours = await listHours({ team_id, bot_id });
+        const exceptions = await listExceptions({ team_id, bot_id });
+        const blocks = await listBlocks({ team_id, bot_id });
+        return ok(command, { settings, hours, exceptions, blocks });
+      }
+
+      return fail(command, "UNKNOWN_COMMAND", `Unknown command: ${command}`);
     }
 
     // All remaining commands need a contact.

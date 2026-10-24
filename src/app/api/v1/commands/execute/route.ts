@@ -35,6 +35,10 @@ function statusFor(code: string | undefined, ok: boolean): number {
       return 409;
     case "TOKEN_INVALID":
       return 400;
+    case "FORBIDDEN":
+      return 403;
+    case "NOT_FOUND":
+      return 404;
     default:
       return 400;
   }

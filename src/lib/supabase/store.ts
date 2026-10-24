@@ -1,6 +1,7 @@
 import type { IdentityBindingClaim } from "@/lib/contract";
 
 import { createBookingAdminClient } from "./admin";
+import { ensurePilotCatalogIfEmpty, listCatalogServices } from "./catalog";
 
 export type DbContact = {
   id: string;
@@ -301,71 +302,57 @@ export async function getOrCreateSession(input: {
   return created as DbSession;
 }
 
-export async function ensurePilotCatalogItem(input: {
-  team_id: string;
-  bot_id: string;
-}): Promise<{ id: string; slug: string; title: string } | null> {
-  const supabase = createBookingAdminClient();
-  if (!supabase) return null;
-
-  const slug = "consultation";
-  const { data: existing } = await supabase
-    .from("catalog_items")
-    .select("id, slug, title")
-    .eq("team_id", input.team_id)
-    .eq("bot_id", input.bot_id)
-    .eq("slug", slug)
-    .maybeSingle();
-
-  if (existing) return existing;
-
-  const { data: created, error } = await supabase
-    .from("catalog_items")
-    .insert({
-      team_id: input.team_id,
-      bot_id: input.bot_id,
-      slug,
-      title: "Consultation",
-      duration_minutes: 30,
-      active: true,
-    })
-    .select("id, slug, title")
-    .single();
-
-  if (error) {
-    console.warn("[booking] catalog seed failed", error.message);
-    return null;
-  }
-  return created;
-}
-
 export type DbCatalogItem = {
   id: string;
   slug: string;
   title: string;
   duration_minutes: number;
   active: boolean;
+  description?: string | null;
+  category?: string | null;
+  sort_order?: number;
+  buffer_before_minutes?: number;
+  buffer_after_minutes?: number;
+  capacity?: number;
+  price_cents?: number | null;
+  currency?: string | null;
+  booking_horizon_days?: number | null;
+  min_notice_minutes?: number | null;
 };
 
-/** Active catalog items for a team/bot (seeds the pilot item if none). */
+/** Active catalog items for a team/bot (seeds Consultation only when empty). */
 export async function listCatalogItems(input: {
   team_id: string;
   bot_id: string;
 }): Promise<DbCatalogItem[]> {
-  const supabase = createBookingAdminClient();
-  if (!supabase) return [];
-  await ensurePilotCatalogItem(input);
-  const { data, error } = await supabase
-    .from("catalog_items")
-    .select("id, slug, title, duration_minutes, active")
-    .eq("team_id", input.team_id)
-    .eq("bot_id", input.bot_id)
-    .eq("active", true)
-    .order("title", { ascending: true });
-  if (error) {
-    throw new Error(`catalog list failed: ${error.message}`);
-  }
-  return (data ?? []) as DbCatalogItem[];
+  await ensurePilotCatalogIfEmpty(input);
+  const rows = await listCatalogServices({ ...input, active_only: true });
+  return rows.map((r) => ({
+    id: r.id,
+    slug: r.slug,
+    title: r.title,
+    duration_minutes: r.duration_minutes,
+    active: r.active,
+    description: r.description,
+    category: r.category,
+    sort_order: r.sort_order,
+    buffer_before_minutes: r.buffer_before_minutes,
+    buffer_after_minutes: r.buffer_after_minutes,
+    capacity: r.capacity,
+    price_cents: r.price_cents,
+    currency: r.currency,
+    booking_horizon_days: r.booking_horizon_days,
+    min_notice_minutes: r.min_notice_minutes,
+  }));
+}
+
+/** Seeds Consultation only when the bot catalog is empty. */
+export async function ensurePilotCatalogItem(input: {
+  team_id: string;
+  bot_id: string;
+}): Promise<{ id: string; slug: string; title: string } | null> {
+  const row = await ensurePilotCatalogIfEmpty(input);
+  return row ? { id: row.id, slug: row.slug, title: row.title } : null;
 }
 
 export async function getContactById(input: {
@@ -425,25 +412,70 @@ export async function listTakenStarts(input: {
   team_id: string;
   bot_id: string;
 }): Promise<Set<string>> {
+  const occupied = await listOccupiedIntervals(input);
+  return new Set(occupied.map((o) => new Date(o.starts_at).toISOString()));
+}
+
+/** Occupied intervals for capacity/buffer-aware slot search. */
+export async function listOccupiedIntervals(input: {
+  team_id: string;
+  bot_id: string;
+}): Promise<Array<{ starts_at: string; ends_at: string }>> {
   const supabase = createBookingAdminClient();
-  if (!supabase) return new Set();
+  if (!supabase) return [];
   const { data, error } = await supabase
     .from("bookings")
-    .select("starts_at")
+    .select("starts_at, catalog_item_id")
     .eq("team_id", input.team_id)
     .eq("bot_id", input.bot_id)
     .in("status", ["pending", "confirmed"])
     .not("starts_at", "is", null);
   if (error) {
-    console.warn("[booking] listTakenStarts failed", error.message);
-    return new Set();
+    console.warn("[booking] listOccupiedIntervals failed", error.message);
+    return [];
   }
-  return new Set(
-    (data ?? [])
-      .map((row) => row.starts_at)
-      .filter((v): v is string => typeof v === "string")
-      .map((v) => new Date(v).toISOString())
-  );
+  const catalogIds = [
+    ...new Set(
+      (data ?? [])
+        .map((r) => r.catalog_item_id)
+        .filter((id): id is string => typeof id === "string")
+    ),
+  ];
+  const meta = new Map<
+    string,
+    { duration: number; before: number; after: number }
+  >();
+  if (catalogIds.length > 0) {
+    const { data: items } = await supabase
+      .from("catalog_items")
+      .select("id, duration_minutes, buffer_before_minutes, buffer_after_minutes")
+      .in("id", catalogIds);
+    for (const item of items ?? []) {
+      meta.set(item.id, {
+        duration: item.duration_minutes ?? 30,
+        before: item.buffer_before_minutes ?? 0,
+        after: item.buffer_after_minutes ?? 0,
+      });
+    }
+  }
+  const out: Array<{ starts_at: string; ends_at: string }> = [];
+  for (const row of data ?? []) {
+    if (typeof row.starts_at !== "string") continue;
+    const m = row.catalog_item_id
+      ? meta.get(row.catalog_item_id)
+      : undefined;
+    const duration = m?.duration ?? 30;
+    const before = m?.before ?? 0;
+    const after = m?.after ?? 0;
+    const startMs = new Date(row.starts_at).getTime() - before * 60_000;
+    const endMs =
+      new Date(row.starts_at).getTime() + (duration + after) * 60_000;
+    out.push({
+      starts_at: new Date(startMs).toISOString(),
+      ends_at: new Date(endMs).toISOString(),
+    });
+  }
+  return out;
 }
 
 export type DbBooking = {
@@ -571,19 +603,40 @@ export async function createBooking(input: {
 
   const startsAt = new Date(input.starts_at).toISOString();
 
-  const { data: clash, error: clashError } = await supabase
-    .from("bookings")
-    .select("id")
-    .eq("team_id", input.team_id)
-    .eq("bot_id", input.bot_id)
-    .eq("starts_at", startsAt)
-    .in("status", ["pending", "confirmed"])
-    .maybeSingle();
-
-  if (clashError) {
-    throw new Error(`bookings conflict check failed: ${clashError.message}`);
+  let capacity = 1;
+  let duration = 30;
+  let bufferBefore = 0;
+  let bufferAfter = 0;
+  if (input.catalog_item_id) {
+    const { data: item } = await supabase
+      .from("catalog_items")
+      .select(
+        "capacity, duration_minutes, buffer_before_minutes, buffer_after_minutes"
+      )
+      .eq("id", input.catalog_item_id)
+      .maybeSingle();
+    if (item) {
+      capacity = Math.max(1, item.capacity ?? 1);
+      duration = item.duration_minutes ?? 30;
+      bufferBefore = item.buffer_before_minutes ?? 0;
+      bufferAfter = item.buffer_after_minutes ?? 0;
+    }
   }
-  if (clash) {
+
+  const blockStart =
+    new Date(startsAt).getTime() - bufferBefore * 60_000;
+  const blockEnd =
+    new Date(startsAt).getTime() + (duration + bufferAfter) * 60_000;
+  const occupied = await listOccupiedIntervals({
+    team_id: input.team_id,
+    bot_id: input.bot_id,
+  });
+  const overlapping = occupied.filter((o) => {
+    const oStart = new Date(o.starts_at).getTime();
+    const oEnd = new Date(o.ends_at).getTime();
+    return blockStart < oEnd && oStart < blockEnd;
+  }).length;
+  if (overlapping >= capacity) {
     throw new SlotConflictError();
   }
 
@@ -603,7 +656,6 @@ export async function createBooking(input: {
     .single();
 
   if (error || !data) {
-    // Unique index race: treat as slot conflict.
     if (error?.code === "23505") {
       throw new SlotConflictError();
     }

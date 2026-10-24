@@ -1,8 +1,8 @@
 # Service catalog & availability (owner-configured, business-agnostic)
 
-Last updated: 2026-10-24  
-Status: **Design locked (2026-10-24); not yet implemented.** This is **Phase 3b.0** — catalog + hours before / alongside the admin calendar console. Implement only after Phase 3a leftovers (web→LINE smoke, link notifications, contact enrichment).  
-Mission: [`_mission-booking-sibling-v1.md`](./_mission-booking-sibling-v1.md) (Resume here, Phase 3b)  
+Last updated: 2026-10-25  
+Status: **Design locked; schema + admin commands ✅ (2026-10-25).** Admin Services/Hours UI next. Phase 3a complete.  
+Mission: [`_mission-booking-sibling-v1.md`](./_mission-booking-sibling-v1.md) (Resume here, Phase 3b.0)  
 Design context: [`booking-command-library.md`](./booking-command-library.md)
 
 ## 1) Why
@@ -15,13 +15,13 @@ This doc locks a **domain-agnostic** model: clinic, salon, consultancy, tutoring
 
 | Piece | Status |
 |-------|--------|
-| `catalog_items` (`team_id, bot_id, slug, title, duration_minutes, active`) | ✅ Exists ([`20261019000000_booking_core_v0.sql`](../supabase/migrations/20261019000000_booking_core_v0.sql)) |
-| `booking.list_services` / `get_availability` / `create` use catalog | ✅ Pilot |
-| Empty catalog → silent seed “Consultation” | ⚠️ Pilot-only; keep only for empty bots until owner UI ships |
-| Owner CRUD for services | ❌ Not built |
-| Weekly hours / exceptions / blocks | ❌ Not built (slots ignore real business hours) |
-| `booking.search_services` for large catalogs | ❌ Not built |
-| Admin Services + Hours UI | ❌ Phase 3b.0 |
+| `catalog_items` (+ duration, buffers, capacity, category, …) | ✅ Migration `20261025000001_catalog_and_hours.sql` |
+| `bot_booking_settings` / `availability_hours` / exceptions / blocks | ✅ |
+| `booking.list_services` / `search_services` / `get_availability` / `create` | ✅ Hours-aware availability; capacity-aware conflicts |
+| Empty catalog → silent seed “Consultation” | ✅ Only when catalog empty |
+| Empty hours → seed Mon–Fri 09–17 once | ✅ `ensureDefaultHoursIfEmpty` |
+| Owner CRUD commands (`catalog.*`, `availability.*`) | ✅ Admin/system actor; smoke `npm run smoke:catalog` PASS |
+| Admin Services + Hours UI | ❌ Next in 3b.0 |
 
 ## 3) Principles (locked)
 
