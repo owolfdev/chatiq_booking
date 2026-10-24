@@ -293,6 +293,7 @@ export async function executeBookingCommand(
           survivor_contact_id: redeemed.survivor_contact_id,
           merged_contact_id: redeemed.merged_contact_id,
           already_linked: redeemed.already_linked,
+          issuing_bot_id: redeemed.issuing_bot_id,
         });
       } catch (err) {
         if (err instanceof IdentityError) {

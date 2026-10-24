@@ -122,7 +122,7 @@ Deterministic in/out, **no customer prose, no natural-language parsing**. Auth: 
 | `booking.cancel` | `booking_id` (or identity's next booking), `confirmed: true` | `CONFIRMATION_REQUIRED` without `confirmed` |
 | `booking.reschedule` | `booking_id`, `new_starts_at`, `confirmed: true` | creates new booking **before** cancelling the old one |
 | `booking.create_connect_token` | — (identity required) | Phase 3a: returns `{ token, short_code, expires_at, connect_url }`; hashed, one-time, 10-min |
-| `booking.redeem_connect_token` | `code` (long token or 6-digit short code) | runs deterministic merge; errors `TOKEN_INVALID` / `TOKEN_USED` / `TOKEN_EXPIRED` / `MERGE_CONFLICT` |
+| `booking.redeem_connect_token` | `code` (long token or 6-digit short code) | runs deterministic merge; returns `already_linked`, `issuing_bot_id` (for ChatIQ tripwire notify); errors `TOKEN_INVALID` / `TOKEN_USED` / `TOKEN_EXPIRED` / `MERGE_CONFLICT` |
 | `booking.get_customer` | — (identity required) | contact + channel bindings + upcoming bookings (follows merges to survivor) |
 
 Identity model & linking ceremony: [`identity-and-account-linking.md`](./identity-and-account-linking.md). Requires migration `20261023000000_identity_linking.sql`.

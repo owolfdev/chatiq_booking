@@ -273,6 +273,8 @@ export async function redeemConnectToken(input: {
   survivor_contact_id: string;
   merged_contact_id: string;
   already_linked: boolean;
+  /** Bot that issued the token — ChatIQ uses this for channel tripwire delivery. */
+  issuing_bot_id: string;
 }> {
   const supabase = createBookingAdminClient();
   if (!supabase) throw new Error("Supabase not configured");
@@ -357,6 +359,7 @@ export async function redeemConnectToken(input: {
       survivor_contact_id: issuingId,
       merged_contact_id: issuingId,
       already_linked: true,
+      issuing_bot_id: token.bot_id,
     };
   }
 
@@ -380,7 +383,7 @@ export async function redeemConnectToken(input: {
     })
     .eq("id", token.id);
 
-  return { ...result, already_linked: false };
+  return { ...result, already_linked: false, issuing_bot_id: token.bot_id };
 }
 
 export async function getCustomerProfile(input: {

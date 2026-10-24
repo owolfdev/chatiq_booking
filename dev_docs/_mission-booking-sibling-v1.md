@@ -1,7 +1,7 @@
 # Mission: Booking sibling v1 (`chatiq-booking`)
 
 Last updated: 2026-10-24  
-Status: **In progress** — **Phase 1 ✅ + Phase 2 ✅**. **Phase 3a ~93%**: both-direction channel link smokes verified (LINE→web 2026-10-24; web→LINE 2026-10-25). Remaining: both-channel link notifications, contact enrichment → then **Phase 3b.0** catalog/hours → **Phase 3b** admin → later **resources** / **stays**. Design: [`booking-command-library.md`](./booking-command-library.md) · Identity: [`identity-and-account-linking.md`](./identity-and-account-linking.md) · Catalog: [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) · Modules: [`base-and-shape-modules.md`](./base-and-shape-modules.md).  
+Status: **In progress** — **Phase 1 ✅ + Phase 2 ✅**. **Phase 3a ~96%**: both-direction links live + tripwire notifications built (2026-10-25). Remaining: live-verify tripwire + contact enrichment → then **Phase 3b.0** catalog/hours → **Phase 3b** admin → later **resources** / **stays**. Design: [`booking-command-library.md`](./booking-command-library.md) · Identity: [`identity-and-account-linking.md`](./identity-and-account-linking.md) · Catalog: [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) · Modules: [`base-and-shape-modules.md`](./base-and-shape-modules.md).  
 Owner: Engineering
 
 ## Resume here (next session)
@@ -13,7 +13,7 @@ Owner: Engineering
 3. **Phase 3a — Identity & account linking** — **← CONTINUE HERE** (spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md)):
    - ~~Consent go-live + LINE book + LINE→web + post-merge web lookup~~ ✅ **2026-10-24**.
    - ~~**web→LINE** short-code~~ ✅ **2026-10-25** — web issued `915412`; LINE redeem → linked + saw Tue 27 Oct 10:00 booking.
-   - **Do this next — build:** both-channel “accounts linked” tripwire notifications (not built; required by DoD).
+   - ~~Both-channel “accounts linked” tripwire~~ ✅ **built 2026-10-25** (ChatIQ: LINE push + web conversation notice after fresh merge; skip `already_linked`). **Verify next:** fresh merge (or second pair) and confirm both doors receive the tripwire copy.
    - **Then:** contact enrichment (LINE display name; web name/email at redemption — display only).
    - Optional: new LINE conversation still finds the Tue 10:00 booking (LINE user-id persistence).
 4. **Phase 3b.0 — Service catalog & hours** (design locked; **do not implement until 3a leftovers done**): [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) — owner CRUD for 1–100 services, hours/blocks, `search_services`, shared calendar v1. Constrained by [`base-and-shape-modules.md`](./base-and-shape-modules.md) (appointments shape; don’t encode staff as fake services; leave room for `resource_id` / `ends_at`).
@@ -96,7 +96,8 @@ Spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md). Do
 - [x] `booking.create_connect_token` / `booking.redeem_connect_token` / `booking.get_customer`; merge is internal-only, deterministic survivor rule, tombstone + audit, `MERGE_CONFLICT` aborts safely
 - [x] API exit tests (no LLM): `npm run smoke:identity` **19/19 on Vercel** — happy-path merge unifies bookings from both sides; wrong code `TOKEN_INVALID`; reuse `TOKEN_USED`; expired (backdated) code `TOKEN_EXPIRED` (2026-10-23)
 - [x] Channel smokes (live): LINE book; LINE→web consent; post-merge web lookup (2026-10-24); **web→LINE short-code** (2026-10-25) — LINE confirmed link + Tue 10:00 booking
-- [ ] Channel smokes (remaining): optional re-check new LINE thread persistence; both-channel "accounts linked" notification (**not built**)
+- [x] Both-channel "accounts linked" tripwire built (2026-10-25) — ChatIQ notify after fresh redeem (consent + concierge); LINE push + web `bot_messages`
+- [ ] Live-verify tripwire on a fresh merge; optional new LINE thread persistence check
 - [x] Concierge linking conversation built + **live EN→TH smoke PASS 2026-10-24** (`chatiq/tests/booking-sibling-concierge-live.test.ts`; unit 12/12; sibling timeout raised for merge)
 - [x] Consent page built + **go-live 2026-10-24** + **signed-in Link-accounts PASS** (live LINE token)
 - [ ] Contact enrichment: LINE display-name snapshot; web name/email copied at redemption (display only)
@@ -153,7 +154,8 @@ Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b.0 catalog/
 - [x] Concierge linking conversation: identity tools + prompt + consent gate; unit 12/12; **live EN→TH smoke PASS 2026-10-24**
 - [x] Consent page go-live + signed-in redeem PASS; `BOOKING_CONNECT_URL_BASE` on booking Vercel
 - [x] Channel: LINE book + LINE→web + post-merge web lookup (2026-10-24); web→LINE short-code (2026-10-25)
-- [ ] Channel: both-channel link notifications; admin unmerge lands in WS-H
+- [x] Channel: both-channel link notifications built (live-verify pending)
+- [ ] Admin unmerge lands in WS-H
 
 ### WS-D — Archive legacy
 
@@ -196,6 +198,24 @@ Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b.0 catalog/
 - [ ] Copilot: NL → confirm-card → execute; customer notification on admin changes
 
 ## 4) Progress Log
+
+### 2026-10-25 — Both-channel link tripwire notifications built
+
+**What changed**
+- Sibling redeem returns `issuing_bot_id` for delivery targeting.
+- ChatIQ `notifyBookingAccountsLinked`: after **fresh** merge (not `already_linked`), best-effort LINE push + web conversation assistant notice (“accounts were just linked… Wasn't you? Contact \<bot\>.”). Wired from consent redeem API + concierge redeem tool.
+- Unit: `tests/booking-link-notifications.test.ts` message copy.
+
+**Verify:** need a **fresh** merge (current pilot pair is already linked — tripwire skips). Use a second LINE/web pair or unmerge once Phase 3b exists.
+
+**Approx. toward DoD:** Phase 3a **~96%**.
+
+```text
+chatiq-booking: Phase 3a (identity): [###################_] ~96% -> DoD
+chatiq:         Phase 3a surfaces:   [###################_] ~96% -> DoD
+```
+
+**Next:** live-verify tripwire OR contact enrichment.
 
 ### 2026-10-25 — web→LINE short-code smoke PASS
 

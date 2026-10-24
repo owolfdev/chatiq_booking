@@ -1,7 +1,7 @@
 # Identity & account linking (LINE ↔ web)
 
 Last updated: 2026-10-24
-Status: **Design locked; mostly built & live-smoked.** Phase 3a ~90% — LINE→web consent + post-merge web lookup verified on `chatiq-line-guide` (2026-10-24). Remaining: web→LINE short-code smoke, both-channel link notifications, contact enrichment. Then Phase 3b admin.
+Status: **Design locked; nearly complete.** Phase 3a ~96% — both-direction channel links live-smoked; both-channel tripwire **built** (2026-10-25, live-verify pending on a fresh merge). Remaining: contact enrichment. Then Phase 3b admin.
 Mission: [`_mission-booking-sibling-v1.md`](./_mission-booking-sibling-v1.md) (Resume here, WS-C, DoD Phase 3a)
 Design context: [`booking-command-library.md`](./booking-command-library.md)
 
@@ -22,12 +22,12 @@ Design context: [`booking-command-library.md`](./booking-command-library.md)
 | Claims per turn (+ prefer `web_user`/`line` over conversation) | ✅ Live; dashboard chat attaches session `web_user` |
 | Connect token + merge + consent page | ✅ Live (cross-bot full-token redeem fixed) |
 | LINE book + LINE→web link + post-merge **web** lookup | ✅ Live on `chatiq-line-guide` (2026-10-24) |
-| web→LINE short-code in chat | ⬜ Smoke remaining |
-| Both-channel “accounts linked” notification | ❌ Not built |
+| web→LINE short-code in chat | ✅ Live 2026-10-25 |
+| Both-channel “accounts linked” notification | ✅ Built (ChatIQ LINE push + web notice); live-verify on fresh merge pending |
 | Contact enrichment (LINE name; web email at redeem) | ❌ Not built |
 | Admin bindings view / unmerge | ❌ Phase 3b |
 
-**Still open:** reverse-door short-code smoke + tripwire notifications + enrichment. Linked customers already share bookings across doors once claims resolve (web chat threads stay separate from LINE threads).
+**Still open:** tripwire live-verify + enrichment. Linked customers already share bookings across doors once claims resolve (web chat threads stay separate from LINE threads).
 
 ## 3) The one security rule
 
