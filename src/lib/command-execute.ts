@@ -10,6 +10,7 @@ import {
   normalizeTimeOfDay,
   searchAvailability,
 } from "@/lib/availability";
+import { COMMAND_CATALOG } from "@/lib/admin/command-catalog";
 import {
   BOOKING_API_CONTRACT_VERSION,
   type BookingCommandExecuteRequest,
@@ -61,29 +62,8 @@ import {
 
 const DEFAULT_TZ = "Asia/Bangkok";
 
-const EXECUTABLE_COMMANDS = new Set([
-  "booking.list_services",
-  "booking.search_services",
-  "booking.get_existing",
-  "booking.get_availability",
-  "booking.create",
-  "booking.cancel",
-  "booking.reschedule",
-  "booking.mark_no_show",
-  "booking.create_connect_token",
-  "booking.redeem_connect_token",
-  "booking.get_customer",
-  "booking.admin_list_identity_audit",
-  "booking.admin_unmerge",
-  "catalog.upsert_service",
-  "catalog.set_active",
-  "catalog.reorder",
-  "availability.set_hours",
-  "availability.set_exception",
-  "availability.block",
-  "availability.unblock",
-  "availability.get_schedule",
-]);
+/** Kept in sync via command-catalog.ts (admin reference + ⌘K). */
+const EXECUTABLE_COMMANDS = new Set(COMMAND_CATALOG.map((c) => c.id));
 
 type Slots = Record<string, unknown>;
 

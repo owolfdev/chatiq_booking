@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 
+import { CommandPalette } from "@/components/admin/CommandPalette";
 import {
   readAdminSession,
   writeAdminSession,
@@ -13,6 +14,7 @@ const NAV = [
   { href: "/admin/customers", label: "Customers" },
   { href: "/admin/services", label: "Services" },
   { href: "/admin/hours", label: "Hours" },
+  { href: "/admin/commands", label: "Commands" },
 ] as const;
 
 const styles = {
@@ -93,6 +95,7 @@ export function AdminShell(props: {
             {item.label}
           </a>
         ))}
+        <CommandPalette />
       </nav>
       <h1 style={{ fontSize: "1.75rem", marginBottom: "0.35rem" }}>
         {props.title}

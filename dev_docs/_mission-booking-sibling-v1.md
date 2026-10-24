@@ -12,7 +12,7 @@ Owner: Engineering
 2. ~~**Phase 2 — LLM concierge**~~ ✅ **DONE 2026-10-21** (live-smoked EN/TH/ZH, see Progress Log). Enabled by `BOOKING_CONCIERGE=llm` (set in local `chatiq/.env.local`; add to Vercel env when deploying concierge to prod chat).
 3. ~~**Phase 3a — Identity & account linking**~~ ✅ **DONE 2026-10-25** (spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md)).
 4. ~~**Phase 3b.0 — Service catalog & hours**~~ ✅ **DONE 2026-10-25** ([`service-catalog-and-availability.md`](./service-catalog-and-availability.md)): schema, admin commands, Services/Hours UI. *Deferred later:* large-catalog concierge prompt rules (`search_services` command already live).
-5. **Phase 3b — Admin doors** — **← CONTINUE**: Schedule + Customers (identity detail/unmerge) done. **Next:** commands reference / ⌘K; then audit + copilot.
+5. **Phase 3b — Admin doors** — **← CONTINUE**: Schedule + Customers + Commands/⌘K done. **Next:** mutation audit + actor scopes; then copilot.
 6. Later shapes — **`resources`** (clinic any/specific clinician), then **`stays`** (hotel nights) — modules doc. Not separate apps.
 7. Parallel/later — large-catalog concierge prompts; widen `BOOKING_SIBLING_BOT_IDS`; WS-D legacy code archive; payments; `BOOKING_CONCIERGE=llm` on ChatIQ Vercel if needed.
 
@@ -114,7 +114,7 @@ Done when **human agents can run the same operations directly and via natural la
 - [x] `/admin` Schedule: week calendar + table + filters + detail cancel/reschedule (2026-10-25 slice 1)
 - [x] Booking detail: no-show + create-on-behalf (2026-10-25 slice 2)
 - [x] Customer detail (channel accounts, identity audit, unmerge) (2026-10-25 slice 3)
-- [ ] Commands reference page + ⌘K palette listing every command, inputs, and who may run it
+- [x] Commands reference page + ⌘K palette listing every command, inputs, and who may run it (2026-10-25 slice 4)
 - [ ] Actor scope enforced (customer=own, provider=own calendar, agent=team) and every mutation audit-logged (actor, via UI/LLM, before→after)
 - [ ] Admin copilot: NL → proposed command card → human Confirm/Edit/Dismiss; read-only NL queries answered from command results; admin changes notify the customer in their language via ChatIQ
 
@@ -194,10 +194,27 @@ Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b.0 catalog/
 - [x] 3b.0 Services/Hours admin UI (2026-10-25)
 - [x] `/admin` Schedule calendar/table + cancel/reschedule/no-show/create-on-behalf (2026-10-25)
 - [x] `/admin/customers` identity detail + `booking.admin_list_identity_audit` / `booking.admin_unmerge` (2026-10-25)
-- [ ] Commands reference + ⌘K palette; actor scopes; audit log
+- [x] Commands reference + ⌘K palette (`/admin/commands`, catalog-driven) (2026-10-25)
+- [ ] Actor scopes; mutation audit log
 - [ ] Copilot: NL → confirm-card → execute; customer notification on admin changes
 
 ## 4) Progress Log
+
+### 2026-10-25 — Phase 3b console slice 4 (commands reference + ⌘K)
+
+**What changed**
+- Shared `command-catalog.ts` drives executable command set, `/admin/commands` reference (search/filter, slots, actor, mutate flag), and AdminShell ⌘K palette (pages + commands).
+- Nav: Commands link; Schedule/Customers/etc. still primary doors.
+
+**Verified:** typecheck.
+
+**Approx. toward DoD:** Phase 3b **~70%**.
+
+```text
+chatiq-booking: Phase 3b (admin console): [##############______] ~70% -> DoD
+```
+
+**Next:** mutation audit + actor scopes; then admin copilot.
 
 ### 2026-10-25 — Phase 3b console slice 3 (customer identity + unmerge)
 
