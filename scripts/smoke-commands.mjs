@@ -40,7 +40,7 @@ function check(name, cond, extra = "") {
   }
 }
 
-async function exec(command, slots = {}, identity = smokeIdentity) {
+async function exec(command, slots = {}, identity = smokeIdentity, opts = {}) {
   const res = await fetch(`${BASE}/api/v1/commands/execute`, {
     method: "POST",
     headers: {
@@ -54,12 +54,18 @@ async function exec(command, slots = {}, identity = smokeIdentity) {
       command,
       slots,
       timezone: TZ,
-      actor: { type: "customer" },
+      actor: opts.actor ?? { type: "customer", via: "api" },
       ...(identity ? { identity_claims: [identity] } : {}),
     }),
   });
   const json = await res.json().catch(() => ({}));
   return { status: res.status, json };
+}
+
+async function execAdmin(command, slots = {}) {
+  return exec(command, slots, null, {
+    actor: { type: "admin", id: "smoke-admin", via: "ui" },
+  });
 }
 
 const stamp = Date.now();
@@ -206,6 +212,36 @@ try {
   check(
     "get_existing empty after cancel",
     afterCancel.json.ok && afterCancel.json.data?.booking === null
+  );
+
+  // Phase 3b — actor scope: customer cannot act as another contact_id.
+  const otherExisting = await exec("booking.get_existing", {}, otherIdentity);
+  const foreignId = otherExisting.json.data?.contact_id;
+  check("other identity resolved a contact", Boolean(foreignId));
+  if (foreignId) {
+    const steal = await exec("booking.get_customer", { contact_id: foreignId });
+    check(
+      "customer cannot load another contact via contact_id",
+      !steal.json.ok && steal.json.code === "FORBIDDEN",
+      JSON.stringify(steal.json)
+    );
+  }
+
+  // Mutation audit: cancel should appear for staff list.
+  const auditList = await execAdmin("booking.admin_list_command_audit", {
+    filter_command: "booking.cancel",
+    bot_scoped: true,
+    limit: 10,
+  });
+  check(
+    "admin list command audit",
+    auditList.json.ok === true && Array.isArray(auditList.json.data?.audit),
+    JSON.stringify(auditList.json)
+  );
+  check(
+    "audit includes recent cancel",
+    (auditList.json.data?.audit ?? []).some((r) => r.command === "booking.cancel"),
+    JSON.stringify(auditList.json.data?.audit?.[0])
   );
 
   const pastCreate = await exec("booking.create", {

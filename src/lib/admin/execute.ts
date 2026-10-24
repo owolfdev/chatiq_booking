@@ -38,7 +38,7 @@ export async function executeAdminCommand(params: {
       command,
       slots: slots ?? {},
       timezone: timezone ?? "Asia/Bangkok",
-      actor: { type: "admin", id: "admin-console" },
+      actor: { type: "admin", id: "admin-console", via: "ui" },
       ...(identity_claims ? { identity_claims } : {}),
       ...(contact_profile ? { contact_profile } : {}),
     }),

@@ -83,7 +83,7 @@ Goal: never dump dozens of slots; never interrogate either.
 - `booking.create` / `reschedule` only accept a `starts_at` that is **currently open and in the future**; slot uniqueness enforced in DB (already live).
 - `get_existing` (and therefore lookup/cancel/reschedule) only sees bookings with `starts_at >= now` (bug fixed 2026-10-21).
 - Cancel/reschedule require an explicit customer confirmation in conversation before the LLM may call with `confirmed=true`; the sibling rejects unconfirmed mutations.
-- Every mutating call is idempotent-safe against double-submit (existing slot-conflict handling) and will be audit-logged with actor + before/after (Phase 3).
+- Every mutating call is idempotent-safe against double-submit (existing slot-conflict handling) and is audit-logged to `command_audit_log` (actor, via, before→after; `/admin/audit`).
 
 ## 5) Three interfaces, one bus
 

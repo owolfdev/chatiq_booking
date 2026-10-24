@@ -69,6 +69,8 @@ export type BookingTurnResponse = BookingTurnReply | BookingTurnError;
 export type BookingActor = {
   type: "customer" | "agent" | "provider" | "admin" | "system";
   id?: string | null;
+  /** How the command was invoked — stored on mutation audit rows. */
+  via?: "ui" | "llm" | "api" | "system" | "cron" | null;
 };
 
 /**

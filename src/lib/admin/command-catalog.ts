@@ -163,6 +163,16 @@ export const COMMAND_CATALOG: CommandEntry[] = [
     keywords: ["split", "unlink"],
   },
   {
+    id: "booking.admin_list_command_audit",
+    category: "booking",
+    actor: "staff",
+    mutating: false,
+    summary: "List recent mutating command audit rows (actor, via, before→after).",
+    slots: ["filter_command?", "contact_id?", "limit?", "bot_scoped?"],
+    adminHref: "/admin/audit",
+    keywords: ["history", "who", "accountability"],
+  },
+  {
     id: "catalog.upsert_service",
     category: "catalog",
     actor: "staff",
@@ -289,6 +299,12 @@ export const ADMIN_NAV_SHORTCUTS: Array<{
     label: "Commands reference",
     href: "/admin/commands",
     keywords: ["palette", "api", "help"],
+  },
+  {
+    id: "nav.audit",
+    label: "Audit log",
+    href: "/admin/audit",
+    keywords: ["history", "mutations", "who"],
   },
 ];
 

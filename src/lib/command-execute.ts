@@ -37,11 +37,16 @@ import {
   upsertBotBookingSettings,
 } from "@/lib/supabase/hours";
 import {
+  listCommandAudit,
+  writeCommandAudit,
+} from "@/lib/supabase/command-audit";
+import {
   createConnectToken,
   getCustomerProfile,
   IdentityError,
   listIdentityAudit,
   redeemConnectToken,
+  resolveSurvivorContactId,
   unmergeFromAudit,
 } from "@/lib/supabase/identity";
 import {
@@ -166,7 +171,37 @@ export async function executeBookingCommand(
   const timezone = body.timezone?.trim() || DEFAULT_TZ;
   const slots: Slots = body.slots ?? {};
   const actor = body.actor ?? { type: "customer" as const };
-  const isStaff = actor.type === "agent" || actor.type === "admin" || actor.type === "provider";
+  const isStaff =
+    actor.type === "agent" ||
+    actor.type === "admin" ||
+    actor.type === "provider";
+  const isSystem = actor.type === "system";
+  /** Provider shares the bot calendar in v1 (resources shape later). */
+  const via = actor.via ?? "api";
+
+  const audit = async (input: {
+    command: string;
+    contact_id?: string | null;
+    before?: Record<string, unknown> | null;
+    after?: Record<string, unknown> | null;
+    ok?: boolean;
+    error_code?: string | null;
+  }) => {
+    await writeCommandAudit({
+      team_id,
+      bot_id,
+      command: input.command,
+      actor_type: actor.type,
+      actor_id: actor.id ?? null,
+      via,
+      contact_id: input.contact_id,
+      before: input.before,
+      after: input.after,
+      ok: input.ok,
+      error_code: input.error_code,
+      slots,
+    });
+  };
 
   try {
     const items = await listCatalogItems({ team_id, bot_id });
@@ -288,12 +323,13 @@ export async function executeBookingCommand(
       });
     }
 
-    // --- Admin identity (staff only; no customer actor required) ---
+    // --- Admin identity / command audit (staff only; no customer actor required) ---
     if (
       command === "booking.admin_list_identity_audit" ||
-      command === "booking.admin_unmerge"
+      command === "booking.admin_unmerge" ||
+      command === "booking.admin_list_command_audit"
     ) {
-      if (!isStaff && actor.type !== "system") {
+      if (!isStaff && !isSystem) {
         return fail(command, "FORBIDDEN", "Admin actor required");
       }
 
@@ -324,6 +360,38 @@ export async function executeBookingCommand(
         });
       }
 
+      if (command === "booking.admin_list_command_audit") {
+        const limitRaw = slots.limit;
+        const botScoped = slots.bot_scoped === true;
+        const rows = await listCommandAudit({
+          team_id,
+          bot_id: botScoped ? bot_id : null,
+          command: str(slots, "filter_command", "command_filter"),
+          contact_id: str(slots, "contact_id"),
+          limit:
+            typeof limitRaw === "number" && Number.isFinite(limitRaw)
+              ? limitRaw
+              : undefined,
+        });
+        return ok(command, {
+          audit: rows.map((r) => ({
+            id: r.id,
+            command: r.command,
+            actor_type: r.actor_type,
+            actor_id: r.actor_id,
+            via: r.via,
+            contact_id: r.contact_id,
+            bot_id: r.bot_id,
+            ok: r.ok,
+            error_code: r.error_code,
+            before: r.before_state,
+            after: r.after_state,
+            slots: r.slots_summary,
+            created_at: r.created_at,
+          })),
+        });
+      }
+
       if (command === "booking.admin_unmerge") {
         if (slots.confirmed !== true) {
           return fail(
@@ -344,6 +412,12 @@ export async function executeBookingCommand(
             actor_type: actor.type,
             actor_id: actor.id ?? null,
           });
+          await audit({
+            command,
+            contact_id: result.survivor_contact_id,
+            before: { audit_id: auditId },
+            after: result as unknown as Record<string, unknown>,
+          });
           return ok(command, result);
         } catch (err) {
           if (err instanceof IdentityError) {
@@ -356,7 +430,7 @@ export async function executeBookingCommand(
 
     // --- Admin catalog / hours (staff only; no customer identity) ---
     if (command.startsWith("catalog.") || command.startsWith("availability.")) {
-      if (!isStaff && actor.type !== "system") {
+      if (!isStaff && !isSystem) {
         return fail(command, "FORBIDDEN", "Admin actor required");
       }
 
@@ -410,6 +484,15 @@ export async function executeBookingCommand(
             active:
               typeof slots.active === "boolean" ? slots.active : undefined,
           });
+          await audit({
+            command,
+            after: {
+              service_id: service.id,
+              slug: service.slug,
+              title: service.title,
+              active: service.active,
+            },
+          });
           return ok(command, { service });
         } catch (err) {
           return fail(
@@ -436,6 +519,15 @@ export async function executeBookingCommand(
             id_or_slug: idOrSlug,
             active: slots.active,
           });
+          await audit({
+            command,
+            before: { id_or_slug: idOrSlug, active: !slots.active },
+            after: {
+              service_id: service.id,
+              slug: service.slug,
+              active: service.active,
+            },
+          });
           return ok(command, { service });
         } catch {
           return fail(command, "SERVICE_NOT_FOUND", `Unknown service: ${idOrSlug}`);
@@ -452,6 +544,10 @@ export async function executeBookingCommand(
           bot_id,
           ordered_ids: ordered.map(String),
         });
+        await audit({
+          command,
+          after: { ordered_ids: ordered.map(String) },
+        });
         return ok(command, { services });
       }
 
@@ -465,6 +561,7 @@ export async function executeBookingCommand(
           );
         }
         try {
+          const prior = await listHours({ team_id, bot_id });
           const hours = await setHours({
             team_id,
             bot_id,
@@ -484,6 +581,11 @@ export async function executeBookingCommand(
               timezone: slots.timezone.trim(),
             });
           }
+          await audit({
+            command,
+            before: { hours: prior },
+            after: { hours },
+          });
           return ok(command, { hours });
         } catch (err) {
           return fail(
@@ -508,6 +610,10 @@ export async function executeBookingCommand(
             start_local: str(slots, "start_local", "start"),
             end_local: str(slots, "end_local", "end"),
             note: str(slots, "note"),
+          });
+          await audit({
+            command,
+            after: { exception },
           });
           return ok(command, { exception });
         } catch (err) {
@@ -537,6 +643,7 @@ export async function executeBookingCommand(
             ends_at: endsAt,
             reason: str(slots, "reason"),
           });
+          await audit({ command, after: { block } });
           return ok(command, { block });
         } catch (err) {
           return fail(
@@ -560,6 +667,11 @@ export async function executeBookingCommand(
         if (!removed) {
           return fail(command, "NOT_FOUND", `Unknown block: ${blockId}`);
         }
+        await audit({
+          command,
+          before: { block_id: blockId },
+          after: { removed: true },
+        });
         return ok(command, { removed: true, block_id: blockId });
       }
 
@@ -575,19 +687,14 @@ export async function executeBookingCommand(
     }
 
     // All remaining commands need a contact.
-    let contactId = str(slots, "contact_id");
-    if (!contactId) {
-      const claims = body.identity_claims ?? [];
-      if (claims.length === 0 && !body.conversation_id) {
-        return fail(
-          command,
-          "IDENTITY_REQUIRED",
-          "Provide identity_claims, conversation_id, or slots.contact_id"
-        );
-      }
-      // conversation_id is often already present as a chatiq_conversation
-      // claim (ChatIQ adapter). Append only when missing — a duplicate in
-      // the claims array causes a unique-constraint failure on insert.
+    // Scope: customers may only act as their claim-resolved identity.
+    // Staff/system may pass slots.contact_id for any team contact.
+    const slotContactId = str(slots, "contact_id");
+    const claims = body.identity_claims ?? [];
+    const hasClaimsOrConversation =
+      claims.length > 0 || Boolean(body.conversation_id);
+
+    async function resolveFromClaims(): Promise<string> {
       const mergedClaims = [...claims];
       if (body.conversation_id) {
         const already = mergedClaims.some(
@@ -609,18 +716,64 @@ export async function executeBookingCommand(
         name: body.contact_profile?.name,
         email: body.contact_profile?.email,
       });
-      contactId = contact.id;
-    } else {
-      const contact = await getContactById({ team_id, contact_id: contactId });
-      if (!contact) {
-        return fail(command, "CONTACT_NOT_FOUND", `Unknown contact: ${contactId}`);
+      return contact.id;
+    }
+
+    let contactId: string;
+    if (!isStaff && !isSystem) {
+      if (!hasClaimsOrConversation) {
+        return fail(
+          command,
+          "IDENTITY_REQUIRED",
+          "Customers must provide identity_claims or conversation_id"
+        );
       }
+      const claimContactId = await resolveFromClaims();
+      if (slotContactId) {
+        const slotSurvivor = await resolveSurvivorContactId({
+          team_id,
+          contact_id: slotContactId,
+        });
+        const claimSurvivor = await resolveSurvivorContactId({
+          team_id,
+          contact_id: claimContactId,
+        });
+        if (slotSurvivor !== claimSurvivor) {
+          return fail(
+            command,
+            "FORBIDDEN",
+            "Customers may only act on their own contact"
+          );
+        }
+      }
+      contactId = claimContactId;
+    } else if (slotContactId) {
+      const contact = await getContactById({
+        team_id,
+        contact_id: slotContactId,
+      });
+      if (!contact) {
+        return fail(
+          command,
+          "CONTACT_NOT_FOUND",
+          `Unknown contact: ${slotContactId}`
+        );
+      }
+      contactId = slotContactId;
       await enrichContactDisplay({
         team_id,
         contact_id: contactId,
         name: body.contact_profile?.name,
         email: body.contact_profile?.email,
       });
+    } else if (hasClaimsOrConversation) {
+      contactId = await resolveFromClaims();
+    } else {
+      return fail(
+        command,
+        "IDENTITY_REQUIRED",
+        "Provide identity_claims, conversation_id, or slots.contact_id"
+      );
     }
 
     if (command === "booking.create_connect_token") {
@@ -630,6 +783,11 @@ export async function executeBookingCommand(
         contact_id: contactId,
       });
       const urlBase = process.env.BOOKING_CONNECT_URL_BASE?.trim();
+      await audit({
+        command,
+        contact_id: contactId,
+        after: { expires_at: issued.expires_at, has_connect_url: Boolean(urlBase) },
+      });
       return ok(command, {
         contact_id: contactId,
         token: issued.token,
@@ -671,6 +829,16 @@ export async function executeBookingCommand(
           redeeming_contact_id: contactId,
           actor_type: actor.type,
           actor_id: actor.id ?? null,
+        });
+        await audit({
+          command,
+          contact_id: redeemed.survivor_contact_id,
+          before: { redeeming_contact_id: contactId },
+          after: {
+            survivor_contact_id: redeemed.survivor_contact_id,
+            merged_contact_id: redeemed.merged_contact_id,
+            already_linked: redeemed.already_linked,
+          },
         });
         return ok(command, {
           contact_id: redeemed.survivor_contact_id,
@@ -730,6 +898,16 @@ export async function executeBookingCommand(
           starts_at: new Date(startsAt).toISOString(),
           timezone,
         });
+        await audit({
+          command,
+          contact_id: contactId,
+          after: {
+            booking_id: booking.id,
+            status: booking.status,
+            starts_at: booking.starts_at,
+            catalog_item_id: booking.catalog_item_id,
+          },
+        });
         return ok(command, {
           contact_id: contactId,
           booking: {
@@ -750,7 +928,7 @@ export async function executeBookingCommand(
 
     // Staff: mark no-show (allowed for past appointments; frees capacity).
     if (command === "booking.mark_no_show") {
-      if (!isStaff && actor.type !== "system") {
+      if (!isStaff && !isSystem) {
         return fail(command, "FORBIDDEN", "Admin actor required");
       }
       if (slots.confirmed !== true) {
@@ -773,6 +951,19 @@ export async function executeBookingCommand(
       const marked = await markBookingNoShow({
         booking_id: target.id,
         notes: `no-show via commands API (${actor.type})`,
+      });
+      await audit({
+        command,
+        contact_id: target.contact_id ?? contactId,
+        before: {
+          booking_id: target.id,
+          status: target.status,
+          starts_at: target.starts_at,
+        },
+        after: {
+          booking_id: target.id,
+          status: marked?.status ?? "no_show",
+        },
       });
       return ok(command, {
         contact_id: contactId,
@@ -815,6 +1006,19 @@ export async function executeBookingCommand(
       const cancelled = await cancelBooking({
         booking_id: existing.id,
         notes: `cancelled via commands API (${actor.type})`,
+      });
+      await audit({
+        command,
+        contact_id: existing.contact_id ?? contactId,
+        before: {
+          booking_id: existing.id,
+          status: existing.status,
+          starts_at: existing.starts_at,
+        },
+        after: {
+          booking_id: existing.id,
+          status: cancelled?.status ?? "cancelled",
+        },
       });
       return ok(command, {
         contact_id: contactId,
@@ -868,6 +1072,21 @@ export async function executeBookingCommand(
     const cancelled = await cancelBooking({
       booking_id: existing.id,
       notes: `cancelled for reschedule via commands API (${actor.type})`,
+    });
+    await audit({
+      command,
+      contact_id: existing.contact_id ?? contactId,
+      before: {
+        booking_id: existing.id,
+        status: existing.status,
+        starts_at: existing.starts_at,
+      },
+      after: {
+        previous_status: cancelled?.status ?? "cancelled",
+        booking_id: created.id,
+        status: created.status,
+        starts_at: created.starts_at,
+      },
     });
     return ok(command, {
       contact_id: contactId,

@@ -127,6 +127,7 @@ Deterministic in/out, **no customer prose, no natural-language parsing**. Auth: 
 | `booking.get_customer` | — (identity required) | contact + channel bindings + upcoming bookings (follows merges to survivor) |
 | `booking.admin_list_identity_audit` | staff | `{ contact_id?, limit? }` → merge/unmerge audit rows with `can_unmerge` |
 | `booking.admin_unmerge` | staff | `{ audit_id, confirmed:true }` → reverse a merge from audit snapshot |
+| `booking.admin_list_command_audit` | staff | `{ filter_command?, contact_id?, limit?, bot_scoped? }` → mutating command audit (actor, via, before→after) |
 
 Identity model & linking ceremony: [`identity-and-account-linking.md`](./identity-and-account-linking.md). Requires migration `20261023000000_identity_linking.sql`.
 
