@@ -112,6 +112,14 @@ Full spec: [`service-catalog-and-availability.md`](./service-catalog-and-availab
 - Customer path unchanged at the command level; large catalogs use `search_services` instead of dumping titles into the prompt.
 - Implement **after** Phase 3a leftovers; design is locked, schema/UI not started.
 
+## 6c) Base + shape modules
+
+Full spec: [`base-and-shape-modules.md`](./base-and-shape-modules.md). Summary:
+
+- One sibling app: **base** + per-bot **shapes** (`appointments` default, then `resources`, then `stays`). Not separate apps per industry.
+- Keep stable verbs (`list_services`, `get_availability`, `create`, …); modules extend slots/strategies.
+- No runtime module loader required for 3b.0; contract exists so clinic/hotel can land later without a rewrite.
+
 ## 7) Contract evolution
 
 - **v0 (today, pilot):** `POST /api/v1/turns/handle` — ChatIQ sends raw `message_text` + optional pre-selected `command`; sibling classifies (English heuristics) and returns English `reply_text`. Proven in pilot; now frozen as fallback/API-smoke path.

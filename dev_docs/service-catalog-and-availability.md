@@ -45,7 +45,7 @@ Customer (ChatIQ concierge)
   → never writes catalog; never invents slots
 ```
 
-**Multi-resource (staff/rooms)** is an explicit later extension: attach resources to services without rewriting customer commands. Not in v1.
+**Multi-resource (staff/rooms)** and **hotel stays** are **shape modules**, not fake catalog rows. See [`base-and-shape-modules.md`](./base-and-shape-modules.md). This 3b.0 doc is the **`appointments`** shape only (shared calendar v1). Do not encode clinicians or rooms as services.
 
 ## 5) Data model (extend, don’t replace)
 
@@ -163,7 +163,9 @@ Rules:
 1. **Schema + admin commands + API smoke** (no LLM): CRUD services, hours, blocks; `get_availability` uses hours; seed “Consultation” only when catalog empty.  
 2. **Admin UI** Services + Hours.  
 3. **Concierge** `search_services` + prompt rules for large catalogs.  
-4. **Later:** resources/providers on services; capacity > 1 proven in smoke; payments on `price_cents`.
+4. **Later modules:** `resources` (any/specific clinician), then `stays` (hotel) — [`base-and-shape-modules.md`](./base-and-shape-modules.md). Capacity > 1 proven in smoke; payments on `price_cents`.
+
+**Uniqueness note for implementers:** today’s pilot may use a bot-wide open-slot unique index. When implementing 3b.0, prefer **capacity-aware** conflict checks (and/or document that uniqueness will become resource-scoped) so the `resources` module is not blocked by a permanent “one booking per start for the whole bot” constraint.
 
 ## 10) Explicit non-goals (v1 catalog)
 

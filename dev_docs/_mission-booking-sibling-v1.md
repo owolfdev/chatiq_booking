@@ -1,7 +1,7 @@
 # Mission: Booking sibling v1 (`chatiq-booking`)
 
 Last updated: 2026-10-24  
-Status: **In progress** — **Phase 1 ✅ + Phase 2 ✅**. **Phase 3a ~90%**: live LINE↔web link + post-merge web lookup verified (2026-10-24). Remaining: web→LINE short-code smoke, both-channel link notifications, contact enrichment → then **Phase 3b.0** catalog/hours (design locked) → **Phase 3b** admin console. Design: [`booking-command-library.md`](./booking-command-library.md) · Identity: [`identity-and-account-linking.md`](./identity-and-account-linking.md) · Catalog: [`service-catalog-and-availability.md`](./service-catalog-and-availability.md).  
+Status: **In progress** — **Phase 1 ✅ + Phase 2 ✅**. **Phase 3a ~90%**: live LINE↔web link + post-merge web lookup verified (2026-10-24). Remaining: web→LINE short-code smoke, both-channel link notifications, contact enrichment → then **Phase 3b.0** catalog/hours → **Phase 3b** admin → later **resources** / **stays** shape modules. Design: [`booking-command-library.md`](./booking-command-library.md) · Identity: [`identity-and-account-linking.md`](./identity-and-account-linking.md) · Catalog: [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) · Modules: [`base-and-shape-modules.md`](./base-and-shape-modules.md).  
 Owner: Engineering
 
 ## Resume here (next session)
@@ -16,9 +16,10 @@ Owner: Engineering
    - **Then build:** both-channel “accounts linked” tripwire notifications (not built; required by DoD).
    - **Then:** contact enrichment (LINE display name; web name/email at redemption — display only).
    - Optional quick check: new LINE conversation still finds the Tue 10:00 booking (LINE user-id persistence).
-4. **Phase 3b.0 — Service catalog & hours** (design locked; **do not implement until 3a leftovers done**): [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) — owner CRUD for 1–100 services, weekly hours/exceptions/blocks, `search_services`, shared calendar v1.
+4. **Phase 3b.0 — Service catalog & hours** (design locked; **do not implement until 3a leftovers done**): [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) — owner CRUD for 1–100 services, hours/blocks, `search_services`, shared calendar v1. Constrained by [`base-and-shape-modules.md`](./base-and-shape-modules.md) (appointments shape; don’t encode staff as fake services; leave room for `resource_id` / `ends_at`).
 5. **Phase 3b — Admin doors**: console (calendar/table, command buttons, ⌘K, commands reference, audit incl. identity audit + unmerge) → copilot with confirm-cards. Services/Hours UI is part of this console (3b.0 first).
-6. Parallel/later — widen `BOOKING_SIBLING_BOT_IDS` per added bot (smoke each); WS-D code archive of legacy engine (docs already archived 2026-10-21); payments; add `BOOKING_CONCIERGE=llm` to ChatIQ Vercel env when concierge goes to prod.
+6. Later shapes — **`resources`** (clinic any/specific clinician), then **`stays`** (hotel nights) — modules doc. Not separate apps.
+7. Parallel/later — widen `BOOKING_SIBLING_BOT_IDS` per added bot (smoke each); WS-D code archive of legacy engine (docs already archived 2026-10-21); payments; add `BOOKING_CONCIERGE=llm` to ChatIQ Vercel env when concierge goes to prod.
 
 **Live pilot context (do not rediscover):**
 - LINE OA bot: `chatiq-line-guide` / `c967a5c0-b0dc-489e-b778-835b5c294588` — `booking_mode=full`, on ChatIQ `BOOKING_SIBLING_BOT_IDS` (with pilot).
@@ -52,6 +53,7 @@ Owner: Engineering
 | **Interpretation (locked 2026-10-21)** | **LLM interprets (any language) and drives the sibling via one fixed typed command set; sibling is deterministic/monolingual internally and never parses natural language; customer never touches the sibling directly.** Heuristic regexes = fallback/shortcuts only, never extended per-language. Full design: [`booking-command-library.md`](./booking-command-library.md) |
 | **Admin (locked 2026-10-21)** | Same command bus, three interfaces: customer concierge (LLM), admin console (direct UI), admin copilot (LLM + human confirm-cards). Actor scope + audit on every command. |
 | **Catalog (locked 2026-10-24)** | Owner-configured, business-agnostic services + hours; shared calendar per bot in v1; 1–100 services via list/search. Spec: [`service-catalog-and-availability.md`](./service-catalog-and-availability.md). |
+| **Modules (locked 2026-10-24)** | One sibling = **base** + optional **shape modules** (`appointments` default, then `resources`, then `stays`). Not one app per industry. Spec: [`base-and-shape-modules.md`](./base-and-shape-modules.md). |
 
 ## 1) Why
 
@@ -194,6 +196,16 @@ Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b.0 catalog/
 - [ ] Copilot: NL → confirm-card → execute; customer notification on admin changes
 
 ## 4) Progress Log
+
+### 2026-10-24 — Base + shape modules architecture locked (connectability)
+
+**What changed (docs only — no runtime rewrite)**
+- New locked spec: [`base-and-shape-modules.md`](./base-and-shape-modules.md) — one booking app; base (identity, command bus, catalog/hours primitives) + per-bot shapes (`appointments` → `resources` → `stays`); stable verbs with optional slots; additive columns (`resource_id`, `ends_at`); clinic ≠ 15 services; hotel ≠ 30 appointment services.
+- **No fundamental code change required now.** Phase 3a / command bus stay. 3b.0 implements the `appointments` shape under these constraints (capacity / uniqueness must not block later resources).
+
+**Approx. toward DoD:** Phase 3a still **~90%**; architecture clarity for post-3b growth **done**.
+
+**Next session still:** web→LINE short-code smoke (not module loader, not catalog impl).
 
 ### 2026-10-24 — Service catalog & availability design locked (Phase 3b.0)
 
