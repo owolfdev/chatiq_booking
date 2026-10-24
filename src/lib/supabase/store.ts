@@ -62,7 +62,27 @@ export async function resolveOrCreateContact(input: {
     claims.push({ ...c, provider, external_id });
   }
 
-  for (const claim of claims) {
+  // Prefer strong channel accounts over weak conversation continuity.
+  // Otherwise a post-link web thread that also sends web_user still matches
+  // the orphan chatiq_conversation contact created before the session was
+  // attached, and "my bookings" stays empty.
+  const claimStrength = (provider: string): number => {
+    if (
+      provider === "web_user" ||
+      provider === "line" ||
+      provider === "instagram"
+    ) {
+      return 3;
+    }
+    if (provider === "channel_user") return 2;
+    if (provider === "chatiq_conversation") return 1;
+    return 0;
+  };
+  const orderedClaims = [...claims].sort(
+    (a, b) => claimStrength(b.provider) - claimStrength(a.provider)
+  );
+
+  for (const claim of orderedClaims) {
     const { data: binding, error: bindingError } = await supabase
       .from("identity_bindings")
       .select("contact_id")
@@ -366,11 +386,13 @@ export async function getLatestOpenBooking(input: {
 }): Promise<DbBooking | null> {
   const supabase = createBookingAdminClient();
   if (!supabase) return null;
+  // Contact-scoped across bots on the team so a linked web door can find a
+  // booking created on LINE (and the reverse). Slot conflict checks stay bot-scoped.
+  void input.bot_id;
   const { data, error } = await supabase
     .from("bookings")
     .select("id, status, starts_at, timezone, catalog_item_id")
     .eq("team_id", input.team_id)
-    .eq("bot_id", input.bot_id)
     .eq("contact_id", input.contact_id)
     .in("status", ["pending", "confirmed"])
     .gte("starts_at", new Date().toISOString())

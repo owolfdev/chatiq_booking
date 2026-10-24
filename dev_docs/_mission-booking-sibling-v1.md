@@ -12,7 +12,7 @@ Owner: Engineering
 2. ~~**Phase 2 — LLM concierge**~~ ✅ **DONE 2026-10-21** (live-smoked EN/TH/ZH, see Progress Log). Enabled by `BOOKING_CONCIERGE=llm` (set in local `chatiq/.env.local`; add to Vercel env when deploying concierge to prod chat).
 3. **Phase 3a — Identity & account linking** — sibling core ✅; concierge linking live-smoked; consent page **go-live ✅ 2026-10-24**. Full spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md). **← CONTINUE HERE:**
    - ~~Consent page go-live~~ ✅ — Vercel `BOOKING_CONNECT_URL_BASE` + signed-out CTA verified. Optional: signed-in Link-accounts click-through.
-   - **Channel smokes (do this next)** — get the LINE-connected bot id / OA first, then: LINE persistence → LINE→web via consent page → web→LINE code in chat → post-merge both-door lookup. **Not yet built:** both-channel "accounts linked" notifications (build with this step).
+   - **Channel smokes** — LINE book ✅; LINE→web consent link ✅ (2026-10-24). **Do this next:** post-merge lookup from both doors → web→LINE short-code in chat. **Not yet built:** both-channel "accounts linked" notifications (build with this step).
    - **Contact enrichment**: LINE display name; web name/email at consent redemption.
    - After booking pushes: `BOOKING_SMOKE_BASE_URL=https://chatiq-booking.vercel.app npm run smoke:identity` (+ `smoke:commands`).
 4. **Phase 3b — Admin doors**: console (calendar/table, command buttons, ⌘K, commands reference, audit incl. identity audit + unmerge) → copilot with confirm-cards. See DoD Phase 3b.
@@ -174,6 +174,34 @@ Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b console (c
 - [ ] Copilot: NL → confirm-card → execute; customer notification on admin changes
 
 ## 4) Progress Log
+
+### 2026-10-24 — Post-merge web lookup miss: session userId never reached sibling
+
+**What happened**
+- Linked customer correct in DB (LINE + `web_user` cc875ce1… + booking Tue 10:00).
+- Web `/chat/chatiq-line-guide` asked “do I have any bookings?” → none. Booking created orphan contact with **only** `chatiq_conversation` (no `web_user`).
+
+**Cause:** `handle-chat-requests` set `botId` in an early `bot_slug` branch, then took `botId && !apiKey` and **skipped** the later `getUser()` that populated `userId` for sibling claims.
+
+**Fix:** resolve `getUser()` before bot lookup (ChatIQ); prefer strong claims (`web_user`/`line`) over `chatiq_conversation` in `resolveOrCreateContact` (booking).
+
+**Next:** deploy both → retest web “my booking” on [chatiq-line-guide chat](https://www.chatiq.io/chat/chatiq-line-guide).
+
+### 2026-10-24 — LINE→web consent link PASS (live)
+
+**Verified**
+- Fresh LINE connect link → signed-in consent → **accounts linked**: bindings `web_user`, `chatiq_conversation`, `line`.
+- Audit merge `e88e349f…`: survivor `8f94e5d6…`, LINE booking `6499b0ef…` Consultation **2026-10-27 10:00 Asia/Bangkok** re-pointed to survivor (`confirmed`).
+
+**Display quirk (fixing):** consent summary said “0 upcoming” because `get_customer` filtered by allowlist[0] bot_id; booking is on LINE bot. Dropping bot filter on customer/upcoming + `get_existing` (team+contact).
+
+**Approx. toward DoD:** Phase 3a **~85%**.
+
+```text
+chatiq-booking: Phase 3a (identity): [#################___] ~85%
+```
+
+**Next:** post-merge lookup from LINE + web; web→LINE short-code path; both-channel “accounts linked” notifications; contact enrichment.
 
 ### 2026-10-24 — LINE book ✅; consent redeem TOKEN_INVALID (cross-bot) fixed
 

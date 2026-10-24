@@ -414,11 +414,14 @@ export async function getCustomerProfile(input: {
   if (!contact) return null;
 
   const bindings = await listBindings(survivorId);
+  // Customer-scoped: after LINE↔web merge, bookings may live under different
+  // bot_ids on the same team. Filtering by request bot_id made the consent
+  // page report "0 upcoming" while the LINE booking was on the survivor.
+  void input.bot_id;
   const { data: bookings, error } = await supabase
     .from("bookings")
     .select("id, status, starts_at, timezone, catalog_item_id")
     .eq("team_id", input.team_id)
-    .eq("bot_id", input.bot_id)
     .eq("contact_id", survivorId)
     .in("status", ["pending", "confirmed"])
     .gte("starts_at", new Date().toISOString())
