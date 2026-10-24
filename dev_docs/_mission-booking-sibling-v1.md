@@ -11,10 +11,10 @@ Owner: Engineering
 1. ~~**Phase 1 — Tool-ready sibling**~~ ✅ **DONE 2026-10-21** (see WS-F; smoke 20/20 locally + on Vercel).
 2. ~~**Phase 2 — LLM concierge**~~ ✅ **DONE 2026-10-21** (live-smoked EN/TH/ZH, see Progress Log). Enabled by `BOOKING_CONCIERGE=llm` (set in local `chatiq/.env.local`; add to Vercel env when deploying concierge to prod chat).
 3. ~~**Phase 3a — Identity & account linking**~~ ✅ **DONE 2026-10-25** (spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md)): both-direction links, tripwire delivery (LINE+web `sent`), enrichment, keepalive cron. Pilot pair already linked — tripwire re-proven via `npx tsx scripts/smoke-link-notify.ts` (forces notify path; redeem skips when `already_linked`).
-4. **Phase 3b.0 — Service catalog & hours** — **← CONTINUE** ([`service-catalog-and-availability.md`](./service-catalog-and-availability.md)):
-   - ~~Schema + admin commands + API smoke~~ ✅ **2026-10-25** (`npm run smoke:catalog` PASS; migration applied).
-   - **Next:** Admin UI Services + Hours under `/admin`.
-   - Then: concierge `search_services` prompt rules for large catalogs (command already live).
+4. **Phase 3b.0 — Service catalog & hours** — **← ALMOST DONE** ([`service-catalog-and-availability.md`](./service-catalog-and-availability.md)):
+   - ~~Schema + admin commands + API smoke~~ ✅ **2026-10-25**.
+   - ~~Admin UI Services + Hours~~ ✅ **2026-10-25** — `/admin/services`, `/admin/hours` (+ shared shell with Schedule).
+   - **Next (optional close-out):** concierge prompt rules for large catalogs (`search_services` already live) → then Phase 3b calendar console.
 5. **Phase 3b — Admin doors**: console (calendar/table, command buttons, ⌘K, commands reference, audit incl. identity audit + unmerge) → copilot with confirm-cards.
 6. Later shapes — **`resources`** (clinic any/specific clinician), then **`stays`** (hotel nights) — modules doc. Not separate apps.
 7. Parallel/later — widen `BOOKING_SIBLING_BOT_IDS` per added bot (smoke each); WS-D code archive of legacy engine (docs already archived 2026-10-21); payments; add `BOOKING_CONCIERGE=llm` to ChatIQ Vercel env when concierge goes to prod.
@@ -107,7 +107,7 @@ Spec: [`service-catalog-and-availability.md`](./service-catalog-and-availability
 
 - [x] Design locked 2026-10-24 (shared calendar v1; catalog fields; hours/exceptions/blocks; admin + search commands; concierge scaling)
 - [x] Schema + admin commands + API smoke (no LLM): `catalog.*`, `availability.*`; hours-aware `get_availability`; seed Consultation/default hours only when empty — 2026-10-25
-- [ ] `/admin` Services + Hours UI
+- [x] `/admin` Services + Hours UI — 2026-10-25
 - [ ] Concierge large-catalog prompt rules (`booking.search_services` command already live)
 
 ### Phase 3b — Admin doors (same command bus)
@@ -192,12 +192,28 @@ Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b.0 catalog/
 
 - [x] **3b.0 design locked** — [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) (2026-10-24); **schema/UI deferred until Phase 3a leftovers**
 - [x] 3b.0 schema + admin commands + `search_services` + smoke (2026-10-25)
-- [ ] 3b.0 Services/Hours admin UI
+- [x] 3b.0 Services/Hours admin UI (2026-10-25)
 - [ ] `/admin` console: calendar/table, detail command buttons, filters; customer detail (channel accounts, identity audit, unmerge)
 - [ ] Commands reference + ⌘K palette; actor scopes; audit log
 - [ ] Copilot: NL → confirm-card → execute; customer notification on admin changes
 
 ## 4) Progress Log
+
+### 2026-10-25 — Phase 3b.0 Services + Hours admin UI
+
+**What changed**
+- Shared admin shell: token + team/bot scope, nav Schedule / Services / Hours.
+- `/admin/services` — add/edit, activate/deactivate, reorder; calls `catalog.*` + `booking.list_services` with `include_inactive` for staff.
+- `/admin/hours` — weekly grid, closed dates, blocks; calls `availability.*`.
+- Typecheck + production build ✅.
+
+**Approx. toward DoD:** Phase 3b.0 **~90%** (concierge large-catalog prompt rules optional remaining).
+
+```text
+chatiq-booking: Phase 3b.0 (catalog/hours): [##################__] ~90% -> DoD
+```
+
+**Next:** optional concierge prompt rules for 9–100 services; else start Phase 3b calendar console.
 
 ### 2026-10-25 — Phase 3b.0 schema + commands (slice 1)
 

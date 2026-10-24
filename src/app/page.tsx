@@ -17,7 +17,9 @@ export default function HomePage() {
           <code>BOOKING_SERVICE_TOKEN</code>
         </li>
         <li>
-          <a href="/admin">Admin schedule</a> — list bookings
+          <a href="/admin">Admin</a> — Schedule ·{" "}
+          <a href="/admin/services">Services</a> ·{" "}
+          <a href="/admin/hours">Hours</a>
         </li>
       </ul>
     </main>

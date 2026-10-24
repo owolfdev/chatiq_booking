@@ -17,6 +17,7 @@ import {
 } from "@/lib/contract";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import {
+  listCatalogServices,
   reorderCatalogServices,
   searchCatalogServices,
   setCatalogServiceActive,
@@ -185,15 +186,28 @@ export async function executeBookingCommand(
     const items = await listCatalogItems({ team_id, bot_id });
 
     if (command === "booking.list_services") {
+      const includeInactive =
+        Boolean(slots.include_inactive) && (isStaff || actor.type === "system");
+      const list = includeInactive
+        ? await listCatalogServices({
+            team_id,
+            bot_id,
+            active_only: false,
+          })
+        : items;
       return ok(command, {
-        services: items.map((i) => ({
+        services: list.map((i) => ({
           id: i.id,
           slug: i.slug,
           title: i.title,
           duration_minutes: i.duration_minutes,
+          active: i.active,
           category: i.category ?? null,
           sort_order: i.sort_order ?? 0,
           description: i.description ?? null,
+          buffer_before_minutes: i.buffer_before_minutes ?? 0,
+          buffer_after_minutes: i.buffer_after_minutes ?? 0,
+          capacity: i.capacity ?? 1,
           price_cents: i.price_cents ?? null,
           currency: i.currency ?? null,
         })),

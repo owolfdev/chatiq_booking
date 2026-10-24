@@ -21,7 +21,7 @@ This doc locks a **domain-agnostic** model: clinic, salon, consultancy, tutoring
 | Empty catalog → silent seed “Consultation” | ✅ Only when catalog empty |
 | Empty hours → seed Mon–Fri 09–17 once | ✅ `ensureDefaultHoursIfEmpty` |
 | Owner CRUD commands (`catalog.*`, `availability.*`) | ✅ Admin/system actor; smoke `npm run smoke:catalog` PASS |
-| Admin Services + Hours UI | ❌ Next in 3b.0 |
+| Admin Services + Hours UI | ✅ `/admin/services`, `/admin/hours` (2026-10-25) |
 
 ## 3) Principles (locked)
 

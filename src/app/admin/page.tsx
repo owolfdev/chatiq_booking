@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { AdminShell, adminUi } from "@/components/admin/AdminShell";
+import type { AdminSession } from "@/lib/admin/session";
+
 type BookingRow = {
   id: string;
   team_id: string;
@@ -12,8 +15,6 @@ type BookingRow = {
   timezone: string;
   created_at: string;
 };
-
-const TOKEN_KEY = "chatiq_booking_admin_token";
 
 function formatWhen(iso: string | null, timeZone: string) {
   if (!iso) return "—";
@@ -29,28 +30,21 @@ function formatWhen(iso: string | null, timeZone: string) {
   }).format(new Date(iso));
 }
 
-export default function AdminSchedulePage() {
-  const [token, setToken] = useState("");
-  const [draftToken, setDraftToken] = useState("");
+function SchedulePanel({ session, ready }: { session: AdminSession; ready: boolean }) {
   const [bookings, setBookings] = useState<BookingRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    const stored = sessionStorage.getItem(TOKEN_KEY);
-    if (stored) {
-      setToken(stored);
-      setDraftToken(stored);
-    }
-  }, []);
-
-  const load = useCallback(async (authToken: string) => {
-    if (!authToken.trim()) return;
+  const load = useCallback(async () => {
+    if (!ready || !session.token.trim()) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/v1/admin/bookings", {
-        headers: { Authorization: `Bearer ${authToken.trim()}` },
+      const url = new URL("/api/v1/admin/bookings", window.location.origin);
+      if (session.teamId) url.searchParams.set("team_id", session.teamId);
+      if (session.botId) url.searchParams.set("bot_id", session.botId);
+      const res = await fetch(url.toString(), {
+        headers: { Authorization: `Bearer ${session.token.trim()}` },
       });
       const data = (await res.json()) as {
         ok?: boolean;
@@ -67,120 +61,53 @@ export default function AdminSchedulePage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [ready, session.token, session.teamId, session.botId]);
 
   useEffect(() => {
-    if (token) void load(token);
-  }, [token, load]);
+    void load();
+  }, [load]);
+
+  if (!ready) {
+    return <p style={adminUi.muted}>Connect with the service token to load bookings.</p>;
+  }
 
   return (
-    <main style={{ padding: "2rem", maxWidth: 960, margin: "0 auto" }}>
-      <p style={{ marginBottom: "0.5rem" }}>
-        <a href="/">← ChatIQ Booking</a>
-      </p>
-      <h1 style={{ fontSize: "1.75rem", marginBottom: "0.35rem" }}>
-        Schedule
-      </h1>
-      <p style={{ color: "#666", marginBottom: "1.5rem" }}>
-        Pilot admin — upcoming / recent bookings (Asia/Bangkok labels). Auth
-        with the same <code>BOOKING_SERVICE_TOKEN</code> as the API.
-      </p>
-
-      <form
-        style={{ display: "flex", gap: "0.5rem", marginBottom: "1.5rem" }}
-        onSubmit={(e) => {
-          e.preventDefault();
-          const next = draftToken.trim();
-          sessionStorage.setItem(TOKEN_KEY, next);
-          setToken(next);
-        }}
-      >
-        <input
-          type="password"
-          value={draftToken}
-          onChange={(e) => setDraftToken(e.target.value)}
-          placeholder="BOOKING_SERVICE_TOKEN"
-          style={{
-            flex: 1,
-            padding: "0.5rem 0.75rem",
-            border: "1px solid #ccc",
-            borderRadius: 6,
-            fontFamily: "ui-monospace, monospace",
-          }}
-        />
-        <button
-          type="submit"
-          style={{
-            padding: "0.5rem 1rem",
-            borderRadius: 6,
-            border: "1px solid #111",
-            background: "#111",
-            color: "#fff",
-            cursor: "pointer",
-          }}
-        >
-          Load
+    <>
+      <div style={adminUi.row}>
+        <button type="button" style={adminUi.button} onClick={() => void load()} disabled={loading}>
+          {loading ? "Loading…" : "Refresh"}
         </button>
-      </form>
-
-      {loading ? <p>Loading…</p> : null}
-      {error ? (
-        <p style={{ color: "#b00020", marginBottom: "1rem" }}>{error}</p>
-      ) : null}
-
-      {!loading && !error && token ? (
+      </div>
+      {error ? <p style={adminUi.error}>{error}</p> : null}
+      {!loading && !error ? (
         bookings.length === 0 ? (
           <p>No bookings yet.</p>
         ) : (
           <div style={{ overflowX: "auto" }}>
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                fontSize: "0.9rem",
-              }}
-            >
+            <table style={adminUi.table}>
               <thead>
-                <tr style={{ textAlign: "left", borderBottom: "2px solid #ddd" }}>
-                  <th style={{ padding: "0.5rem" }}>When</th>
-                  <th style={{ padding: "0.5rem" }}>Status</th>
-                  <th style={{ padding: "0.5rem" }}>Booking</th>
-                  <th style={{ padding: "0.5rem" }}>Contact</th>
-                  <th style={{ padding: "0.5rem" }}>Bot</th>
+                <tr>
+                  <th style={adminUi.th}>When</th>
+                  <th style={adminUi.th}>Status</th>
+                  <th style={adminUi.th}>Booking</th>
+                  <th style={adminUi.th}>Contact</th>
+                  <th style={adminUi.th}>Bot</th>
                 </tr>
               </thead>
               <tbody>
                 {bookings.map((row) => (
-                  <tr key={row.id} style={{ borderBottom: "1px solid #eee" }}>
-                    <td style={{ padding: "0.5rem", whiteSpace: "nowrap" }}>
+                  <tr key={row.id}>
+                    <td style={{ ...adminUi.td, whiteSpace: "nowrap" }}>
                       {formatWhen(row.starts_at, row.timezone)}
                     </td>
-                    <td style={{ padding: "0.5rem" }}>{row.status}</td>
-                    <td
-                      style={{
-                        padding: "0.5rem",
-                        fontFamily: "ui-monospace, monospace",
-                        fontSize: "0.8rem",
-                      }}
-                    >
+                    <td style={adminUi.td}>{row.status}</td>
+                    <td style={{ ...adminUi.td, fontFamily: "ui-monospace, monospace", fontSize: "0.8rem" }}>
                       {row.id.slice(0, 8)}…
                     </td>
-                    <td
-                      style={{
-                        padding: "0.5rem",
-                        fontFamily: "ui-monospace, monospace",
-                        fontSize: "0.8rem",
-                      }}
-                    >
+                    <td style={{ ...adminUi.td, fontFamily: "ui-monospace, monospace", fontSize: "0.8rem" }}>
                       {row.contact_id.slice(0, 8)}…
                     </td>
-                    <td
-                      style={{
-                        padding: "0.5rem",
-                        fontFamily: "ui-monospace, monospace",
-                        fontSize: "0.8rem",
-                      }}
-                    >
+                    <td style={{ ...adminUi.td, fontFamily: "ui-monospace, monospace", fontSize: "0.8rem" }}>
                       {row.bot_id.slice(0, 8)}…
                     </td>
                   </tr>
@@ -190,6 +117,18 @@ export default function AdminSchedulePage() {
           </div>
         )
       ) : null}
-    </main>
+    </>
+  );
+}
+
+export default function AdminSchedulePage() {
+  return (
+    <AdminShell
+      path="/admin"
+      title="Schedule"
+      subtitle="Upcoming / recent bookings. Auth with BOOKING_SERVICE_TOKEN; scope by team and bot."
+    >
+      {({ session, ready }) => <SchedulePanel session={session} ready={ready} />}
+    </AdminShell>
   );
 }
