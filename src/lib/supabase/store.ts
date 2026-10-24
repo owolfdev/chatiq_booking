@@ -519,23 +519,31 @@ export async function getLatestOpenBooking(input: {
   return (data as DbBooking | null) ?? null;
 }
 
+export type AdminBookingRow = {
+  id: string;
+  team_id: string;
+  bot_id: string;
+  contact_id: string;
+  status: string;
+  starts_at: string | null;
+  timezone: string;
+  created_at: string;
+  catalog_item_id: string | null;
+  contact_name: string | null;
+  contact_email: string | null;
+  service_title: string | null;
+  service_slug: string | null;
+  service_duration_minutes: number | null;
+};
+
 export async function listRecentBookings(input?: {
   team_id?: string;
   bot_id?: string;
   limit?: number;
-}): Promise<
-  Array<{
-    id: string;
-    team_id: string;
-    bot_id: string;
-    contact_id: string;
-    status: string;
-    starts_at: string | null;
-    timezone: string;
-    created_at: string;
-    catalog_item_id: string | null;
-  }>
-> {
+  status?: string | string[];
+  from?: string;
+  to?: string;
+}): Promise<AdminBookingRow[]> {
   const supabase = createBookingAdminClient();
   if (!supabase) return [];
 
@@ -545,16 +553,79 @@ export async function listRecentBookings(input?: {
       "id, team_id, bot_id, contact_id, status, starts_at, timezone, created_at, catalog_item_id"
     )
     .order("starts_at", { ascending: true, nullsFirst: false })
-    .limit(input?.limit ?? 50);
+    .limit(input?.limit ?? 100);
 
   if (input?.team_id) query = query.eq("team_id", input.team_id);
   if (input?.bot_id) query = query.eq("bot_id", input.bot_id);
+  if (input?.status) {
+    const statuses = Array.isArray(input.status) ? input.status : [input.status];
+    query = query.in("status", statuses);
+  }
+  if (input?.from) query = query.gte("starts_at", input.from);
+  if (input?.to) query = query.lte("starts_at", input.to);
 
   const { data, error } = await query;
   if (error) {
     throw new Error(`bookings list failed: ${error.message}`);
   }
-  return data ?? [];
+  const rows = data ?? [];
+  if (rows.length === 0) return [];
+
+  const contactIds = [...new Set(rows.map((r) => r.contact_id).filter(Boolean))];
+  const catalogIds = [
+    ...new Set(
+      rows
+        .map((r) => r.catalog_item_id)
+        .filter((id): id is string => typeof id === "string")
+    ),
+  ];
+
+  const contactMap = new Map<
+    string,
+    { name: string | null; email: string | null }
+  >();
+  if (contactIds.length > 0) {
+    const { data: contacts } = await supabase
+      .from("contacts")
+      .select("id, name, email")
+      .in("id", contactIds);
+    for (const c of contacts ?? []) {
+      contactMap.set(c.id, { name: c.name ?? null, email: c.email ?? null });
+    }
+  }
+
+  const catalogMap = new Map<
+    string,
+    { title: string; slug: string; duration_minutes: number }
+  >();
+  if (catalogIds.length > 0) {
+    const { data: items } = await supabase
+      .from("catalog_items")
+      .select("id, title, slug, duration_minutes")
+      .in("id", catalogIds);
+    for (const item of items ?? []) {
+      catalogMap.set(item.id, {
+        title: item.title,
+        slug: item.slug,
+        duration_minutes: item.duration_minutes,
+      });
+    }
+  }
+
+  return rows.map((r) => {
+    const contact = contactMap.get(r.contact_id);
+    const service = r.catalog_item_id
+      ? catalogMap.get(r.catalog_item_id)
+      : undefined;
+    return {
+      ...r,
+      contact_name: contact?.name ?? null,
+      contact_email: contact?.email ?? null,
+      service_title: service?.title ?? null,
+      service_slug: service?.slug ?? null,
+      service_duration_minutes: service?.duration_minutes ?? null,
+    };
+  });
 }
 
 export class SlotConflictError extends Error {

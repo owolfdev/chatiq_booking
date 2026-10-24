@@ -35,12 +35,22 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const teamId = url.searchParams.get("team_id");
   const botId = url.searchParams.get("bot_id");
+  const status = url.searchParams.get("status");
+  const from = url.searchParams.get("from");
+  const to = url.searchParams.get("to");
+  const limitRaw = url.searchParams.get("limit");
+  const limit = limitRaw ? Number(limitRaw) : 100;
 
   try {
     const bookings = await listRecentBookings({
       team_id: teamId || undefined,
       bot_id: botId || undefined,
-      limit: 50,
+      status: status
+        ? status.split(",").map((s) => s.trim()).filter(Boolean)
+        : undefined,
+      from: from || undefined,
+      to: to || undefined,
+      limit: Number.isFinite(limit) ? Math.min(200, Math.max(1, limit)) : 100,
     });
     return NextResponse.json({
       contract_version: BOOKING_API_CONTRACT_VERSION,
