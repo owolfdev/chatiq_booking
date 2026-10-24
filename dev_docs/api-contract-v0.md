@@ -125,6 +125,8 @@ Deterministic in/out, **no customer prose, no natural-language parsing**. Auth: 
 | `booking.create_connect_token` | — (identity required) | Phase 3a: returns `{ token, short_code, expires_at, connect_url }`; hashed, one-time, 10-min |
 | `booking.redeem_connect_token` | `code` (long token or 6-digit short code) | runs deterministic merge; returns `already_linked`, `issuing_bot_id` (for ChatIQ tripwire notify); errors `TOKEN_INVALID` / `TOKEN_USED` / `TOKEN_EXPIRED` / `MERGE_CONFLICT` |
 | `booking.get_customer` | — (identity required) | contact + channel bindings + upcoming bookings (follows merges to survivor) |
+| `booking.admin_list_identity_audit` | staff | `{ contact_id?, limit? }` → merge/unmerge audit rows with `can_unmerge` |
+| `booking.admin_unmerge` | staff | `{ audit_id, confirmed:true }` → reverse a merge from audit snapshot |
 
 Identity model & linking ceremony: [`identity-and-account-linking.md`](./identity-and-account-linking.md). Requires migration `20261023000000_identity_linking.sql`.
 

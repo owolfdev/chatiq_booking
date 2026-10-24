@@ -101,7 +101,8 @@ Full spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md
 
 - Every channel account (web login, LINE user ID) is a legitimate first-class account; bookings belong to the **customer**, channel accounts are keys in `identity_bindings`.
 - A customer at the "wrong" door is linked, never matched by claimed attributes: **merge only on proof of control of both accounts** — `booking.create_connect_token` (hashed, one-time, 10-min) → fresh login + consent screen at the other door → `booking.redeem_connect_token` runs the internal, deterministic `booking.merge_contacts` (fixed survivor rule, tombstone, audit) → notification to both channels.
-- `booking.get_customer` exposes a customer's channel accounts to themselves and to staff (admin detail/unmerge in Phase 3b).
+- `booking.get_customer` exposes a customer's channel accounts to themselves and to staff.
+- Staff: `booking.admin_list_identity_audit` / `booking.admin_unmerge` (from merge audit snapshot; `/admin/customers`).
 - The concierge may offer and guide the ceremony with zero existence disclosure pre-merge; it never executes `merge_contacts` directly.
 
 ## 6b) Service catalog & availability (Phase 3b.0)

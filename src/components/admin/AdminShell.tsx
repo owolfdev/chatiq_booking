@@ -10,6 +10,7 @@ import {
 
 const NAV = [
   { href: "/admin", label: "Schedule" },
+  { href: "/admin/customers", label: "Customers" },
   { href: "/admin/services", label: "Services" },
   { href: "/admin/hours", label: "Hours" },
 ] as const;

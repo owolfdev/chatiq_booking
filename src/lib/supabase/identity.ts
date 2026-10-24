@@ -186,29 +186,65 @@ export async function mergeContacts(input: {
     mergedBindings = aOlder ? bBindings : aBindings;
   }
 
-  // Re-point bookings and sessions.
-  const { error: bookingsError } = await supabase
+  // Snapshot rows that will move so Phase 3b admin unmerge can reverse.
+  const { data: bookingsToMove, error: bookingsListError } = await supabase
     .from("bookings")
-    .update({ contact_id: survivor.id, updated_at: new Date().toISOString() })
+    .select("id")
     .eq("contact_id", merged.id);
-  if (bookingsError) {
-    throw new Error(`bookings re-point failed: ${bookingsError.message}`);
+  if (bookingsListError) {
+    throw new Error(`bookings list for merge failed: ${bookingsListError.message}`);
   }
-  const { error: sessionsError } = await supabase
+  const movedBookingIds = (bookingsToMove ?? []).map((r) => r.id as string);
+
+  const { data: sessionsToMove, error: sessionsListError } = await supabase
     .from("booking_sessions")
-    .update({ contact_id: survivor.id, updated_at: new Date().toISOString() })
+    .select("id")
     .eq("contact_id", merged.id);
-  if (sessionsError) {
-    throw new Error(`sessions re-point failed: ${sessionsError.message}`);
+  if (sessionsListError) {
+    throw new Error(`sessions list for merge failed: ${sessionsListError.message}`);
+  }
+  const movedSessionIds = (sessionsToMove ?? []).map((r) => r.id as string);
+
+  // Re-point bookings and sessions.
+  if (movedBookingIds.length > 0) {
+    const { error: bookingsError } = await supabase
+      .from("bookings")
+      .update({ contact_id: survivor.id, updated_at: new Date().toISOString() })
+      .in("id", movedBookingIds);
+    if (bookingsError) {
+      throw new Error(`bookings re-point failed: ${bookingsError.message}`);
+    }
+  }
+  if (movedSessionIds.length > 0) {
+    const { error: sessionsError } = await supabase
+      .from("booking_sessions")
+      .update({ contact_id: survivor.id, updated_at: new Date().toISOString() })
+      .in("id", movedSessionIds);
+    if (sessionsError) {
+      throw new Error(`sessions re-point failed: ${sessionsError.message}`);
+    }
   }
 
   // Move bindings; drop duplicates the survivor already owns.
   const survivorKeys = new Set(
     survivorBindings.map((x) => `${x.provider}:${x.external_id}`)
   );
+  const movedBindingIds: string[] = [];
+  const deletedDuplicateBindings: Array<{
+    id: string;
+    provider: string;
+    external_id: string;
+    verified: boolean;
+  }> = [];
   for (const binding of mergedBindings) {
     const key = `${binding.provider}:${binding.external_id}`;
     if (survivorKeys.has(key)) {
+      deletedDuplicateBindings.push({
+        id: binding.id,
+        provider: binding.provider,
+        external_id: binding.external_id,
+        verified: binding.verified,
+      });
       await supabase.from("identity_bindings").delete().eq("id", binding.id);
     } else {
       const { error } = await supabase
@@ -218,6 +254,7 @@ export async function mergeContacts(input: {
       if (error) {
         throw new Error(`identity_bindings move failed: ${error.message}`);
       }
+      movedBindingIds.push(binding.id);
     }
   }
 
@@ -226,12 +263,18 @@ export async function mergeContacts(input: {
   const mergedHasName = Boolean(merged.name && merged.name !== "Guest");
   const survivorLacksEmail = !survivor.email?.trim();
   const mergedHasEmail = Boolean(merged.email?.trim());
-  if ((survivorIsPlaceholder && mergedHasName) || (survivorLacksEmail && mergedHasEmail)) {
+  const displayCopied: { name?: string; email?: string } = {};
+  if (survivorIsPlaceholder && mergedHasName && merged.name) {
+    displayCopied.name = merged.name;
+  }
+  if (survivorLacksEmail && mergedHasEmail && merged.email) {
+    displayCopied.email = merged.email;
+  }
+  if (Object.keys(displayCopied).length > 0) {
     await supabase
       .from("contacts")
       .update({
-        ...(survivorIsPlaceholder && mergedHasName ? { name: merged.name } : {}),
-        ...(survivorLacksEmail && mergedHasEmail ? { email: merged.email } : {}),
+        ...displayCopied,
         updated_at: new Date().toISOString(),
       })
       .eq("id", survivor.id);
@@ -250,6 +293,15 @@ export async function mergeContacts(input: {
     throw new Error(`contacts tombstone failed: ${tombstoneError.message}`);
   }
 
+  const details = {
+    schema: 1,
+    moved_booking_ids: movedBookingIds,
+    moved_session_ids: movedSessionIds,
+    moved_binding_ids: movedBindingIds,
+    deleted_duplicate_bindings: deletedDuplicateBindings,
+    display_copied: Object.keys(displayCopied).length > 0 ? displayCopied : null,
+  };
+
   const { error: auditError } = await supabase.from("identity_audit_log").insert({
     team_id: input.team_id,
     bot_id: input.bot_id,
@@ -259,7 +311,7 @@ export async function mergeContacts(input: {
     actor_type: input.actor_type,
     actor_id: input.actor_id ?? null,
     token_id: input.token_id ?? null,
-    details: {},
+    details,
   });
   if (auditError) {
     throw new Error(`identity_audit_log insert failed: ${auditError.message}`);
@@ -448,5 +500,285 @@ export async function getCustomerProfile(input: {
       created_at: b.created_at,
     })),
     upcoming_bookings: bookings ?? [],
+  };
+}
+
+export type IdentityAuditRow = {
+  id: string;
+  team_id: string;
+  bot_id: string;
+  action: "merge" | "unmerge";
+  survivor_contact_id: string;
+  merged_contact_id: string;
+  actor_type: string;
+  actor_id: string | null;
+  token_id: string | null;
+  details: Record<string, unknown>;
+  created_at: string;
+  can_unmerge: boolean;
+};
+
+type MergeDetailsV1 = {
+  schema?: number;
+  moved_booking_ids?: string[];
+  moved_session_ids?: string[];
+  moved_binding_ids?: string[];
+  deleted_duplicate_bindings?: Array<{
+    id: string;
+    provider: string;
+    external_id: string;
+    verified: boolean;
+  }>;
+  display_copied?: { name?: string; email?: string } | null;
+};
+
+function hasUnmergeSnapshot(details: Record<string, unknown> | null | undefined): boolean {
+  if (!details || typeof details !== "object") return false;
+  const d = details as MergeDetailsV1;
+  return (
+    Array.isArray(d.moved_booking_ids) ||
+    Array.isArray(d.moved_session_ids) ||
+    Array.isArray(d.moved_binding_ids) ||
+    Array.isArray(d.deleted_duplicate_bindings)
+  );
+}
+
+/** Staff: identity audit for a contact (survivor or tombstone side). */
+export async function listIdentityAudit(input: {
+  team_id: string;
+  contact_id?: string | null;
+  limit?: number;
+}): Promise<IdentityAuditRow[]> {
+  const supabase = createBookingAdminClient();
+  if (!supabase) return [];
+
+  const limit =
+    typeof input.limit === "number" && Number.isFinite(input.limit)
+      ? Math.min(Math.max(Math.floor(input.limit), 1), 100)
+      : 40;
+
+  let query = supabase
+    .from("identity_audit_log")
+    .select(
+      "id, team_id, bot_id, action, survivor_contact_id, merged_contact_id, actor_type, actor_id, token_id, details, created_at"
+    )
+    .eq("team_id", input.team_id)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (input.contact_id?.trim()) {
+    const contactId = input.contact_id.trim();
+    // PostgREST: or filter on either side of the merge.
+    query = query.or(
+      `survivor_contact_id.eq.${contactId},merged_contact_id.eq.${contactId}`
+    );
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    throw new Error(`identity_audit_log list failed: ${error.message}`);
+  }
+
+  const rows = (data ?? []) as Array<Omit<IdentityAuditRow, "can_unmerge"> & {
+    details: Record<string, unknown> | null;
+  }>;
+
+  // A merge can be unmerged only if the tombstone is still pointing at the
+  // survivor and we have a reversible snapshot (schema ≥1 merges).
+  const mergedIds = [
+    ...new Set(rows.filter((r) => r.action === "merge").map((r) => r.merged_contact_id)),
+  ];
+  const tombstones = new Map<string, string | null>();
+  if (mergedIds.length > 0) {
+    const { data: contacts } = await supabase
+      .from("contacts")
+      .select("id, merged_into")
+      .in("id", mergedIds);
+    for (const c of contacts ?? []) {
+      tombstones.set(c.id as string, (c.merged_into as string | null) ?? null);
+    }
+  }
+
+  const unmergeRows = rows.filter((r) => r.action === "unmerge");
+
+  return rows.map((r) => {
+    const laterUnmerge = unmergeRows.some(
+      (u) =>
+        u.survivor_contact_id === r.survivor_contact_id &&
+        u.merged_contact_id === r.merged_contact_id &&
+        u.created_at > r.created_at
+    );
+    const stillMerged =
+      r.action === "merge" &&
+      tombstones.get(r.merged_contact_id) === r.survivor_contact_id &&
+      !laterUnmerge;
+    return {
+      ...r,
+      details: (r.details ?? {}) as Record<string, unknown>,
+      can_unmerge: Boolean(stillMerged && hasUnmergeSnapshot(r.details ?? {})),
+    };
+  });
+}
+
+/**
+ * Admin-only reverse of a merge, from the audit record.
+ * Requires merge.details snapshot written at merge time (schema 1+).
+ */
+export async function unmergeFromAudit(input: {
+  team_id: string;
+  bot_id: string;
+  audit_id: string;
+  actor_type: string;
+  actor_id?: string | null;
+}): Promise<{
+  survivor_contact_id: string;
+  restored_contact_id: string;
+  restored_bookings: number;
+  restored_bindings: number;
+}> {
+  const supabase = createBookingAdminClient();
+  if (!supabase) throw new Error("Supabase not configured");
+
+  const { data: audit, error: auditLoadError } = await supabase
+    .from("identity_audit_log")
+    .select(
+      "id, team_id, bot_id, action, survivor_contact_id, merged_contact_id, details, created_at"
+    )
+    .eq("id", input.audit_id)
+    .eq("team_id", input.team_id)
+    .maybeSingle();
+  if (auditLoadError) {
+    throw new Error(`identity_audit_log load failed: ${auditLoadError.message}`);
+  }
+  if (!audit) {
+    throw new IdentityError("AUDIT_NOT_FOUND", "No matching identity audit record");
+  }
+  if (audit.action !== "merge") {
+    throw new IdentityError("NOT_A_MERGE", "Only merge audit rows can be unmerged");
+  }
+
+  const survivorId = audit.survivor_contact_id as string;
+  const restoredId = audit.merged_contact_id as string;
+  const details = (audit.details ?? {}) as MergeDetailsV1;
+
+  if (!hasUnmergeSnapshot(details as Record<string, unknown>)) {
+    throw new IdentityError(
+      "UNMERGE_UNSUPPORTED",
+      "This merge has no reversible snapshot (pre-schema merges cannot be auto-unmerged)"
+    );
+  }
+
+  const restored = await getContactById({
+    team_id: input.team_id,
+    contact_id: restoredId,
+  });
+  if (!restored) {
+    throw new IdentityError("CONTACT_NOT_FOUND", "Merged contact no longer exists");
+  }
+  if (restored.merged_into !== survivorId) {
+    throw new IdentityError(
+      "ALREADY_UNMERGED",
+      "Merged contact is no longer tombstoned under this survivor"
+    );
+  }
+
+  // Refuse if a later unmerge audit already exists for this pair.
+  const { data: laterUnmerge } = await supabase
+    .from("identity_audit_log")
+    .select("id")
+    .eq("team_id", input.team_id)
+    .eq("action", "unmerge")
+    .eq("survivor_contact_id", survivorId)
+    .eq("merged_contact_id", restoredId)
+    .gt("created_at", audit.created_at)
+    .limit(1);
+  if ((laterUnmerge ?? []).length > 0) {
+    throw new IdentityError("ALREADY_UNMERGED", "This merge was already unmerged");
+  }
+
+  const movedBookingIds = details.moved_booking_ids ?? [];
+  const movedSessionIds = details.moved_session_ids ?? [];
+  const movedBindingIds = details.moved_binding_ids ?? [];
+  const deletedDupes = details.deleted_duplicate_bindings ?? [];
+
+  if (movedBookingIds.length > 0) {
+    const { error } = await supabase
+      .from("bookings")
+      .update({ contact_id: restoredId, updated_at: new Date().toISOString() })
+      .in("id", movedBookingIds)
+      .eq("contact_id", survivorId);
+    if (error) throw new Error(`bookings restore failed: ${error.message}`);
+  }
+  if (movedSessionIds.length > 0) {
+    const { error } = await supabase
+      .from("booking_sessions")
+      .update({ contact_id: restoredId, updated_at: new Date().toISOString() })
+      .in("id", movedSessionIds)
+      .eq("contact_id", survivorId);
+    if (error) throw new Error(`sessions restore failed: ${error.message}`);
+  }
+  if (movedBindingIds.length > 0) {
+    const { error } = await supabase
+      .from("identity_bindings")
+      .update({ contact_id: restoredId })
+      .in("id", movedBindingIds)
+      .eq("contact_id", survivorId);
+    if (error) throw new Error(`bindings restore failed: ${error.message}`);
+  }
+
+  // Recreate bindings that were deleted as duplicates of the survivor.
+  for (const dup of deletedDupes) {
+    const { error } = await supabase.from("identity_bindings").insert({
+      team_id: input.team_id,
+      contact_id: restoredId,
+      provider: dup.provider,
+      external_id: dup.external_id,
+      verified: dup.verified,
+    });
+    // Unique conflict = already exists; treat as ok for idempotent retry.
+    if (error && !/duplicate|unique/i.test(error.message)) {
+      throw new Error(`binding recreate failed: ${error.message}`);
+    }
+  }
+
+  const { error: clearError } = await supabase
+    .from("contacts")
+    .update({
+      merged_into: null,
+      merged_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", restoredId);
+  if (clearError) {
+    throw new Error(`contacts untombstone failed: ${clearError.message}`);
+  }
+
+  const { error: auditInsertError } = await supabase.from("identity_audit_log").insert({
+    team_id: input.team_id,
+    bot_id: input.bot_id,
+    action: "unmerge",
+    survivor_contact_id: survivorId,
+    merged_contact_id: restoredId,
+    actor_type: input.actor_type,
+    actor_id: input.actor_id ?? null,
+    token_id: null,
+    details: {
+      schema: 1,
+      source_audit_id: input.audit_id,
+      restored_booking_ids: movedBookingIds,
+      restored_session_ids: movedSessionIds,
+      restored_binding_ids: movedBindingIds,
+      recreated_bindings: deletedDupes.length,
+    },
+  });
+  if (auditInsertError) {
+    throw new Error(`identity_audit_log unmerge insert failed: ${auditInsertError.message}`);
+  }
+
+  return {
+    survivor_contact_id: survivorId,
+    restored_contact_id: restoredId,
+    restored_bookings: movedBookingIds.length,
+    restored_bindings: movedBindingIds.length + deletedDupes.length,
   };
 }

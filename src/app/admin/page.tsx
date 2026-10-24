@@ -755,6 +755,13 @@ function SchedulePanel({
                     {selected.contact_email}
                   </>
                 ) : null}
+                <br />
+                <a
+                  href={`/admin/customers?contact_id=${encodeURIComponent(selected.contact_id)}`}
+                  style={{ fontSize: "0.85rem" }}
+                >
+                  View customer →
+                </a>
               </dd>
               <dt style={adminUi.muted}>Service</dt>
               <dd style={{ margin: "0 0 0.5rem" }}>

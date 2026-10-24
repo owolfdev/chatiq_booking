@@ -39,7 +39,9 @@ import {
   createConnectToken,
   getCustomerProfile,
   IdentityError,
+  listIdentityAudit,
   redeemConnectToken,
+  unmergeFromAudit,
 } from "@/lib/supabase/identity";
 import {
   cancelBooking,
@@ -71,6 +73,8 @@ const EXECUTABLE_COMMANDS = new Set([
   "booking.create_connect_token",
   "booking.redeem_connect_token",
   "booking.get_customer",
+  "booking.admin_list_identity_audit",
+  "booking.admin_unmerge",
   "catalog.upsert_service",
   "catalog.set_active",
   "catalog.reorder",
@@ -302,6 +306,72 @@ export async function executeBookingCommand(
         })),
         timezone: tz,
       });
+    }
+
+    // --- Admin identity (staff only; no customer actor required) ---
+    if (
+      command === "booking.admin_list_identity_audit" ||
+      command === "booking.admin_unmerge"
+    ) {
+      if (!isStaff && actor.type !== "system") {
+        return fail(command, "FORBIDDEN", "Admin actor required");
+      }
+
+      if (command === "booking.admin_list_identity_audit") {
+        const contactFilter = str(slots, "contact_id");
+        const limitRaw = slots.limit;
+        const rows = await listIdentityAudit({
+          team_id,
+          contact_id: contactFilter,
+          limit:
+            typeof limitRaw === "number" && Number.isFinite(limitRaw)
+              ? limitRaw
+              : undefined,
+        });
+        return ok(command, {
+          audit: rows.map((r) => ({
+            id: r.id,
+            action: r.action,
+            survivor_contact_id: r.survivor_contact_id,
+            merged_contact_id: r.merged_contact_id,
+            actor_type: r.actor_type,
+            actor_id: r.actor_id,
+            token_id: r.token_id,
+            created_at: r.created_at,
+            can_unmerge: r.can_unmerge,
+            details: r.details,
+          })),
+        });
+      }
+
+      if (command === "booking.admin_unmerge") {
+        if (slots.confirmed !== true) {
+          return fail(
+            command,
+            "CONFIRMATION_REQUIRED",
+            "admin_unmerge requires slots.confirmed=true"
+          );
+        }
+        const auditId = str(slots, "audit_id", "id");
+        if (!auditId) {
+          return fail(command, "INVALID_REQUEST", "slots.audit_id is required");
+        }
+        try {
+          const result = await unmergeFromAudit({
+            team_id,
+            bot_id,
+            audit_id: auditId,
+            actor_type: actor.type,
+            actor_id: actor.id ?? null,
+          });
+          return ok(command, result);
+        } catch (err) {
+          if (err instanceof IdentityError) {
+            return fail(command, err.code, err.message);
+          }
+          throw err;
+        }
+      }
     }
 
     // --- Admin catalog / hours (staff only; no customer identity) ---

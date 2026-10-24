@@ -12,7 +12,7 @@ Owner: Engineering
 2. ~~**Phase 2 — LLM concierge**~~ ✅ **DONE 2026-10-21** (live-smoked EN/TH/ZH, see Progress Log). Enabled by `BOOKING_CONCIERGE=llm` (set in local `chatiq/.env.local`; add to Vercel env when deploying concierge to prod chat).
 3. ~~**Phase 3a — Identity & account linking**~~ ✅ **DONE 2026-10-25** (spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md)).
 4. ~~**Phase 3b.0 — Service catalog & hours**~~ ✅ **DONE 2026-10-25** ([`service-catalog-and-availability.md`](./service-catalog-and-availability.md)): schema, admin commands, Services/Hours UI. *Deferred later:* large-catalog concierge prompt rules (`search_services` command already live).
-5. **Phase 3b — Admin doors** — **← CONTINUE**: Schedule has calendar/table + cancel/reschedule/no-show/create-on-behalf. **Next:** customer identity detail + unmerge, or commands reference / ⌘K; then audit + copilot.
+5. **Phase 3b — Admin doors** — **← CONTINUE**: Schedule + Customers (identity detail/unmerge) done. **Next:** commands reference / ⌘K; then audit + copilot.
 6. Later shapes — **`resources`** (clinic any/specific clinician), then **`stays`** (hotel nights) — modules doc. Not separate apps.
 7. Parallel/later — large-catalog concierge prompts; widen `BOOKING_SIBLING_BOT_IDS`; WS-D legacy code archive; payments; `BOOKING_CONCIERGE=llm` on ChatIQ Vercel if needed.
 
@@ -113,7 +113,7 @@ Done when **human agents can run the same operations directly and via natural la
 
 - [x] `/admin` Schedule: week calendar + table + filters + detail cancel/reschedule (2026-10-25 slice 1)
 - [x] Booking detail: no-show + create-on-behalf (2026-10-25 slice 2)
-- [ ] Customer detail (channel accounts, identity audit, unmerge)
+- [x] Customer detail (channel accounts, identity audit, unmerge) (2026-10-25 slice 3)
 - [ ] Commands reference page + ⌘K palette listing every command, inputs, and who may run it
 - [ ] Actor scope enforced (customer=own, provider=own calendar, agent=team) and every mutation audit-logged (actor, via UI/LLM, before→after)
 - [ ] Admin copilot: NL → proposed command card → human Confirm/Edit/Dismiss; read-only NL queries answered from command results; admin changes notify the customer in their language via ChatIQ
@@ -153,7 +153,7 @@ Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b.0 catalog/
 - [x] Consent page go-live + signed-in redeem PASS; `BOOKING_CONNECT_URL_BASE` on booking Vercel
 - [x] Channel: LINE book + LINE→web + post-merge web lookup (2026-10-24); web→LINE short-code (2026-10-25)
 - [x] Channel: both-channel link notifications built + delivery verified (2026-10-25)
-- [ ] Admin unmerge lands in WS-H
+- [x] Admin unmerge lands in WS-H (`booking.admin_unmerge` + `/admin/customers`, 2026-10-25)
 
 ### WS-D — Archive legacy
 
@@ -192,11 +192,30 @@ Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b.0 catalog/
 - [x] **3b.0 design locked** — [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) (2026-10-24); **schema/UI deferred until Phase 3a leftovers**
 - [x] 3b.0 schema + admin commands + `search_services` + smoke (2026-10-25)
 - [x] 3b.0 Services/Hours admin UI (2026-10-25)
-- [x] `/admin` Schedule calendar/table + cancel/reschedule/no-show/create-on-behalf (2026-10-25); remaining: customer identity detail/unmerge
+- [x] `/admin` Schedule calendar/table + cancel/reschedule/no-show/create-on-behalf (2026-10-25)
+- [x] `/admin/customers` identity detail + `booking.admin_list_identity_audit` / `booking.admin_unmerge` (2026-10-25)
 - [ ] Commands reference + ⌘K palette; actor scopes; audit log
 - [ ] Copilot: NL → confirm-card → execute; customer notification on admin changes
 
 ## 4) Progress Log
+
+### 2026-10-25 — Phase 3b console slice 3 (customer identity + unmerge)
+
+**What changed**
+- Merges now write a reversible snapshot in `identity_audit_log.details` (moved bookings/sessions/bindings + deleted dupes).
+- Commands: `booking.admin_list_identity_audit`, `booking.admin_unmerge` (staff, `confirmed=true`).
+- `/admin/customers`: load by contact id (or Schedule “View customer →”); channel accounts, upcoming, audit table with Unmerge.
+- `smoke-identity` extended for audit list + unmerge roundtrip.
+
+**Verified:** typecheck + `npm run smoke:identity` (local).
+
+**Approx. toward DoD:** Phase 3b **~55%**.
+
+```text
+chatiq-booking: Phase 3b (admin console): [###########_________] ~55% -> DoD
+```
+
+**Next:** commands reference page / ⌘K; then mutation audit + copilot.
 
 ### 2026-10-25 — Phase 3b console slice 2 (no-show + create-on-behalf)
 

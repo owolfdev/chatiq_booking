@@ -25,7 +25,7 @@ Design context: [`booking-command-library.md`](./booking-command-library.md)
 | web→LINE short-code in chat | ✅ Live 2026-10-25 |
 | Both-channel “accounts linked” notification | ✅ Built + delivery verified (2026-10-25) — LINE push + web notice `sent` |
 | Contact enrichment (LINE name; web email at redeem) | ✅ Built (2026-10-25) — `contact_profile` on turn/commands; fills `contacts.name`/`email` (display only) |
-| Admin bindings view / unmerge | ❌ Phase 3b |
+| Admin bindings view / unmerge | ✅ `/admin/customers` + `booking.admin_unmerge` |
 
 Linked customers share bookings across doors once claims resolve (web chat threads stay separate from LINE threads).
 
@@ -69,7 +69,8 @@ Command: `booking.merge_contacts` (internal — invoked by `redeem_connect_token
 | `booking.redeem_connect_token` | customer at proving door | `{ code }` or signed link payload → runs merge → `{ customer_id, merged_contact_id }` |
 | `booking.get_customer` | customer (own) / staff | Contact + channel accounts (providers, verified, linked dates) — powers "my accounts" and admin detail |
 | `booking.merge_contacts` | **internal/system only** | See §5; not exposed to concierge tools |
-| `booking.admin_unmerge` | admin | Phase 3b, from audit record |
+| `booking.admin_list_identity_audit` | admin | List merge/unmerge rows; `can_unmerge` when snapshot + tombstone still active |
+| `booking.admin_unmerge` | admin | From audit record (`confirmed:true`); restores bookings/bindings from merge snapshot |
 
 Claims hygiene alongside: only **verified** claims may ever be merge keys; `chatiq_conversation` claims are weak (continuity only) and must never initiate a merge alone. LINE bindings stay scoped `(team_id, provider="line", external_id)`; if a team ever runs multiple LINE OAs, scope the provider per integration then.
 

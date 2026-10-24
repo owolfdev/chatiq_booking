@@ -56,8 +56,8 @@ async function exec(command, slots, identity, opts = {}) {
       command,
       slots: slots ?? {},
       timezone: TZ,
-      actor: { type: "customer" },
-      identity_claims: [identity],
+      actor: opts.actor ?? { type: "customer" },
+      ...(identity ? { identity_claims: [identity] } : {}),
       ...(opts.contact_profile
         ? { contact_profile: opts.contact_profile }
         : {}),
@@ -65,6 +65,13 @@ async function exec(command, slots, identity, opts = {}) {
   });
   const json = await res.json().catch(() => ({}));
   return { status: res.status, json };
+}
+
+async function execAdmin(command, slots, opts = {}) {
+  return exec(command, slots, null, {
+    ...opts,
+    actor: { type: "admin", id: "smoke-admin" },
+  });
 }
 
 const stamp = Date.now();
@@ -240,6 +247,78 @@ try {
 
   const existing = await exec("booking.get_existing", {}, lineIdentity);
   check("get_existing works from LINE door after merge", existing.json.ok && Boolean(existing.json.data?.booking));
+
+  // Phase 3b — admin audit + unmerge (requires merge.details snapshot).
+  const auditList = await execAdmin("booking.admin_list_identity_audit", {
+    contact_id: survivor,
+    limit: 10,
+  });
+  check("admin list identity audit", auditList.json.ok === true, JSON.stringify(auditList.json));
+  const mergeRow = (auditList.json.data?.audit ?? []).find(
+    (r) => r.action === "merge" && r.can_unmerge === true
+  );
+  check("merge audit row is unmergeable", Boolean(mergeRow), JSON.stringify(auditList.json.data?.audit?.[0]));
+
+  if (mergeRow) {
+    const forbidCustomer = await exec(
+      "booking.admin_unmerge",
+      { audit_id: mergeRow.id, confirmed: true },
+      webIdentity
+    );
+    check(
+      "customer cannot admin_unmerge",
+      !forbidCustomer.json.ok && forbidCustomer.json.code === "FORBIDDEN",
+      JSON.stringify(forbidCustomer.json)
+    );
+
+    const needConfirm = await execAdmin("booking.admin_unmerge", {
+      audit_id: mergeRow.id,
+    });
+    check(
+      "unmerge requires confirmed=true",
+      !needConfirm.json.ok && needConfirm.json.code === "CONFIRMATION_REQUIRED",
+      JSON.stringify(needConfirm.json)
+    );
+
+    const unmerged = await execAdmin("booking.admin_unmerge", {
+      audit_id: mergeRow.id,
+      confirmed: true,
+    });
+    check("admin unmerge succeeds", unmerged.json.ok === true, JSON.stringify(unmerged.json));
+    const restoredId = unmerged.json.data?.restored_contact_id;
+    check("restored contact id present", Boolean(restoredId));
+
+    const afterUnmergeLine = await exec("booking.get_customer", {}, lineIdentity);
+    const afterUnmergeWeb = await exec("booking.get_customer", {}, webIdentity);
+    const lineProviders = (afterUnmergeLine.json.data?.bindings ?? []).map((b) => b.provider);
+    const webProviders = (afterUnmergeWeb.json.data?.bindings ?? []).map((b) => b.provider);
+    check(
+      "after unmerge LINE door no longer sees web binding",
+      lineProviders.includes("line") && !lineProviders.includes("web_user"),
+      lineProviders.join(",")
+    );
+    check(
+      "after unmerge web door no longer sees LINE binding",
+      webProviders.includes("web_user") && !webProviders.includes("line"),
+      webProviders.join(",")
+    );
+    check(
+      "doors resolve to different contacts after unmerge",
+      afterUnmergeLine.json.data?.contact?.id !== afterUnmergeWeb.json.data?.contact?.id,
+      `${afterUnmergeLine.json.data?.contact?.id} vs ${afterUnmergeWeb.json.data?.contact?.id}`
+    );
+
+    const auditAfter = await execAdmin("booking.admin_list_identity_audit", {
+      contact_id: survivor,
+      limit: 10,
+    });
+    const sameMerge = (auditAfter.json.data?.audit ?? []).find((r) => r.id === mergeRow.id);
+    check(
+      "merge row no longer unmergeable after unmerge",
+      sameMerge && sameMerge.can_unmerge === false,
+      JSON.stringify(sameMerge)
+    );
+  }
 } catch (err) {
   failures += 1;
   console.error("Smoke crashed:", err);
