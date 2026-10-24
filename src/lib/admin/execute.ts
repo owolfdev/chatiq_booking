@@ -9,8 +9,15 @@ export async function executeAdminCommand(params: {
   command: string;
   slots?: Record<string, unknown>;
   timezone?: string;
+  identity_claims?: Array<{
+    provider: string;
+    external_id: string;
+    verified?: boolean;
+  }>;
+  contact_profile?: { name?: string | null; email?: string | null } | null;
 }): Promise<AdminCommandResult> {
-  const { session, command, slots, timezone } = params;
+  const { session, command, slots, timezone, identity_claims, contact_profile } =
+    params;
   if (!session.token.trim()) {
     return { ok: false, error: "Token required", code: "UNAUTHORIZED" };
   }
@@ -32,6 +39,8 @@ export async function executeAdminCommand(params: {
       slots: slots ?? {},
       timezone: timezone ?? "Asia/Bangkok",
       actor: { type: "admin", id: "admin-console" },
+      ...(identity_claims ? { identity_claims } : {}),
+      ...(contact_profile ? { contact_profile } : {}),
     }),
   });
 

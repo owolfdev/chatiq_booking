@@ -51,6 +51,7 @@ import {
   getOrCreateSession,
   listCatalogItems,
   listOccupiedIntervals,
+  markBookingNoShow,
   resolveOrCreateContact,
   SlotConflictError,
   type DbCatalogItem,
@@ -66,6 +67,7 @@ const EXECUTABLE_COMMANDS = new Set([
   "booking.create",
   "booking.cancel",
   "booking.reschedule",
+  "booking.mark_no_show",
   "booking.create_connect_token",
   "booking.redeem_connect_token",
   "booking.get_customer",
@@ -694,6 +696,44 @@ export async function executeBookingCommand(
         }
         throw err;
       }
+    }
+
+    // Staff: mark no-show (allowed for past appointments; frees capacity).
+    if (command === "booking.mark_no_show") {
+      if (!isStaff && actor.type !== "system") {
+        return fail(command, "FORBIDDEN", "Admin actor required");
+      }
+      if (slots.confirmed !== true) {
+        return fail(
+          command,
+          "CONFIRMATION_REQUIRED",
+          "mark_no_show requires slots.confirmed=true"
+        );
+      }
+      const noShowId = str(slots, "booking_id", "id");
+      const target = noShowId
+        ? await getBookingById({ team_id, bot_id, booking_id: noShowId })
+        : await getLatestOpenBooking({ team_id, bot_id, contact_id: contactId });
+      if (!target) {
+        return fail(command, "BOOKING_NOT_FOUND", "No matching booking");
+      }
+      if (target.status !== "pending" && target.status !== "confirmed") {
+        return fail(command, "BOOKING_NOT_ACTIVE", `Booking is ${target.status}`);
+      }
+      const marked = await markBookingNoShow({
+        booking_id: target.id,
+        notes: `no-show via commands API (${actor.type})`,
+      });
+      return ok(command, {
+        contact_id: contactId,
+        booking: marked
+          ? {
+              id: marked.id,
+              status: marked.status,
+              starts_at: marked.starts_at,
+            }
+          : { id: target.id, status: "no_show" },
+      });
     }
 
     // cancel / reschedule share booking resolution + confirmation gate.

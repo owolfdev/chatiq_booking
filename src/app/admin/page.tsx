@@ -26,7 +26,14 @@ type BookingRow = {
 type OfferSlot = { starts_at: string; label: string; timezone?: string };
 
 type ViewMode = "week" | "table";
-type StatusFilter = "open" | "all" | "cancelled";
+type StatusFilter = "open" | "all" | "cancelled" | "no_show";
+
+type ServiceOption = {
+  id: string;
+  slug: string;
+  title: string;
+  duration_minutes: number;
+};
 
 function formatWhen(iso: string | null, timeZone: string) {
   if (!iso) return "—";
@@ -82,6 +89,13 @@ function SchedulePanel({
   const [busyAction, setBusyAction] = useState(false);
   const [rescheduleSlots, setRescheduleSlots] = useState<OfferSlot[]>([]);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [services, setServices] = useState<ServiceOption[]>([]);
+  const [createName, setCreateName] = useState("");
+  const [createEmail, setCreateEmail] = useState("");
+  const [createServiceSlug, setCreateServiceSlug] = useState("");
+  const [createSlots, setCreateSlots] = useState<OfferSlot[]>([]);
+  const [createMsg, setCreateMsg] = useState<string | null>(null);
 
   const tz = "Asia/Bangkok";
   const weekStart = useMemo(() => startOfWeekMonday(weekAnchor), [weekAnchor]);
@@ -102,6 +116,8 @@ function SchedulePanel({
         url.searchParams.set("status", "pending,confirmed");
       } else if (statusFilter === "cancelled") {
         url.searchParams.set("status", "cancelled");
+      } else if (statusFilter === "no_show") {
+        url.searchParams.set("status", "no_show");
       }
       url.searchParams.set("limit", "150");
       const res = await fetch(url.toString(), {
@@ -169,6 +185,129 @@ function SchedulePanel({
     setActionMsg("Cancelled.");
     setSelectedId(null);
     setRescheduleSlots([]);
+    await load();
+  }
+
+  async function markNoShowSelected() {
+    if (!selected) return;
+    if (
+      !window.confirm(
+        `Mark no-show for ${selected.contact_name || "customer"}?`
+      )
+    ) {
+      return;
+    }
+    setBusyAction(true);
+    setActionMsg(null);
+    const result = await executeAdminCommand({
+      session,
+      command: "booking.mark_no_show",
+      slots: {
+        booking_id: selected.id,
+        contact_id: selected.contact_id,
+        confirmed: true,
+      },
+      timezone: selected.timezone || tz,
+    });
+    setBusyAction(false);
+    if (!result.ok) {
+      setActionMsg(result.error);
+      return;
+    }
+    setActionMsg("Marked no-show.");
+    setSelectedId(null);
+    setRescheduleSlots([]);
+    await load();
+  }
+
+  async function openCreatePanel() {
+    setShowCreate(true);
+    setCreateMsg(null);
+    setCreateSlots([]);
+    const result = await executeAdminCommand({
+      session,
+      command: "booking.list_services",
+      slots: {},
+      timezone: tz,
+    });
+    if (!result.ok) {
+      setCreateMsg(result.error);
+      return;
+    }
+    const rows = Array.isArray(result.data.services)
+      ? (result.data.services as ServiceOption[])
+      : [];
+    setServices(rows);
+    if (rows[0] && !createServiceSlug) {
+      setCreateServiceSlug(rows[0].slug);
+    }
+  }
+
+  async function loadCreateSlots() {
+    if (!createServiceSlug) {
+      setCreateMsg("Pick a service first");
+      return;
+    }
+    setBusyAction(true);
+    setCreateMsg(null);
+    const result = await executeAdminCommand({
+      session,
+      command: "booking.get_availability",
+      slots: { service_slug: createServiceSlug, limit: 5 },
+      timezone: tz,
+    });
+    setBusyAction(false);
+    if (!result.ok) {
+      setCreateMsg(result.error);
+      setCreateSlots([]);
+      return;
+    }
+    const slots = Array.isArray(result.data.slots)
+      ? (result.data.slots as OfferSlot[])
+      : [];
+    setCreateSlots(slots);
+    if (slots.length === 0) setCreateMsg("No open slots right now.");
+  }
+
+  async function createOnBehalf(startsAt: string) {
+    if (!createServiceSlug) return;
+    if (!createName.trim()) {
+      setCreateMsg("Customer name is required");
+      return;
+    }
+    setBusyAction(true);
+    setCreateMsg(null);
+    const guestId = `admin-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const result = await executeAdminCommand({
+      session,
+      command: "booking.create",
+      slots: {
+        service_slug: createServiceSlug,
+        starts_at: startsAt,
+      },
+      timezone: tz,
+      identity_claims: [
+        {
+          provider: "admin_created",
+          external_id: guestId,
+          verified: false,
+        },
+      ],
+      contact_profile: {
+        name: createName.trim(),
+        email: createEmail.trim() || null,
+      },
+    });
+    setBusyAction(false);
+    if (!result.ok) {
+      setCreateMsg(result.error);
+      return;
+    }
+    setCreateMsg("Booking created.");
+    setCreateSlots([]);
+    setCreateName("");
+    setCreateEmail("");
+    setShowCreate(false);
     await load();
   }
 
@@ -260,6 +399,7 @@ function SchedulePanel({
           <option value="open">Open (pending/confirmed)</option>
           <option value="all">All statuses</option>
           <option value="cancelled">Cancelled</option>
+          <option value="no_show">No-show</option>
         </select>
         <button
           type="button"
@@ -269,9 +409,129 @@ function SchedulePanel({
         >
           {loading ? "Loading…" : "Refresh"}
         </button>
+        <button
+          type="button"
+          style={adminUi.button}
+          onClick={() => void openCreatePanel()}
+        >
+          New booking
+        </button>
       </div>
 
       {error ? <p style={adminUi.error}>{error}</p> : null}
+
+      {showCreate ? (
+        <section
+          style={{
+            border: "1px solid #e5e5e5",
+            borderRadius: 8,
+            padding: "1rem",
+            marginBottom: "1.25rem",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              marginBottom: "0.75rem",
+            }}
+          >
+            <h2 style={{ fontSize: "1.05rem", margin: 0 }}>Create on behalf</h2>
+            <button
+              type="button"
+              style={adminUi.buttonSecondary}
+              onClick={() => {
+                setShowCreate(false);
+                setCreateSlots([]);
+                setCreateMsg(null);
+              }}
+            >
+              Close
+            </button>
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
+              gap: "0.75rem",
+            }}
+          >
+            <div>
+              <label style={adminUi.label}>Customer name</label>
+              <input
+                style={{ ...adminUi.input, width: "100%", fontFamily: "inherit" }}
+                value={createName}
+                onChange={(e) => setCreateName(e.target.value)}
+              />
+            </div>
+            <div>
+              <label style={adminUi.label}>Email (optional)</label>
+              <input
+                style={{ ...adminUi.input, width: "100%", fontFamily: "inherit" }}
+                value={createEmail}
+                onChange={(e) => setCreateEmail(e.target.value)}
+              />
+            </div>
+            <div>
+              <label style={adminUi.label}>Service</label>
+              <select
+                style={{ ...adminUi.input, width: "100%", fontFamily: "inherit" }}
+                value={createServiceSlug}
+                onChange={(e) => setCreateServiceSlug(e.target.value)}
+              >
+                {services.map((s) => (
+                  <option key={s.id} value={s.slug}>
+                    {s.title} ({s.duration_minutes}m)
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div style={{ ...adminUi.row, marginTop: "0.75rem" }}>
+            <button
+              type="button"
+              style={adminUi.button}
+              disabled={busyAction}
+              onClick={() => void loadCreateSlots()}
+            >
+              Find open slots
+            </button>
+          </div>
+          {createMsg ? (
+            <p
+              style={{
+                marginTop: 8,
+                color: createMsg.endsWith(".") ? "#0a7" : "#b00020",
+                fontSize: "0.9rem",
+              }}
+            >
+              {createMsg}
+            </p>
+          ) : null}
+          {createSlots.length > 0 ? (
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 6,
+                marginTop: 8,
+              }}
+            >
+              {createSlots.map((s) => (
+                <button
+                  key={s.starts_at}
+                  type="button"
+                  style={adminUi.buttonSecondary}
+                  disabled={busyAction}
+                  onClick={() => void createOnBehalf(s.starts_at)}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       <div
         style={{
@@ -532,30 +792,51 @@ function SchedulePanel({
               </p>
             ) : null}
 
-            {(selected.status === "pending" || selected.status === "confirmed") &&
-            selected.starts_at &&
-            new Date(selected.starts_at).getTime() > Date.now() ? (
-              <div style={{ ...adminUi.row, marginTop: "1rem", flexDirection: "column" }}>
-                <button
-                  type="button"
-                  style={adminUi.button}
-                  disabled={busyAction}
-                  onClick={() => void loadRescheduleSlots()}
-                >
-                  Offer reschedule slots
-                </button>
+            {selected.status === "pending" || selected.status === "confirmed" ? (
+              <div
+                style={{
+                  ...adminUi.row,
+                  marginTop: "1rem",
+                  flexDirection: "column",
+                }}
+              >
+                {selected.starts_at &&
+                new Date(selected.starts_at).getTime() > Date.now() ? (
+                  <>
+                    <button
+                      type="button"
+                      style={adminUi.button}
+                      disabled={busyAction}
+                      onClick={() => void loadRescheduleSlots()}
+                    >
+                      Offer reschedule slots
+                    </button>
+                    <button
+                      type="button"
+                      style={adminUi.buttonSecondary}
+                      disabled={busyAction}
+                      onClick={() => void cancelSelected()}
+                    >
+                      Cancel booking
+                    </button>
+                  </>
+                ) : (
+                  <p style={{ ...adminUi.muted, margin: 0 }}>
+                    Past booking — cancel/reschedule closed; you can mark no-show.
+                  </p>
+                )}
                 <button
                   type="button"
                   style={adminUi.buttonSecondary}
                   disabled={busyAction}
-                  onClick={() => void cancelSelected()}
+                  onClick={() => void markNoShowSelected()}
                 >
-                  Cancel booking
+                  Mark no-show
                 </button>
               </div>
             ) : (
               <p style={{ ...adminUi.muted, marginTop: "1rem" }}>
-                No mutate actions for past or inactive bookings.
+                No mutate actions for inactive bookings.
               </p>
             )}
 
@@ -591,7 +872,7 @@ export default function AdminSchedulePage() {
     <AdminShell
       path="/admin"
       title="Schedule"
-      subtitle="Week calendar or table. Select a booking to cancel or reschedule (admin actor)."
+      subtitle="Week/table views. Detail: cancel, reschedule, no-show. New booking = create on behalf."
     >
       {({ session, ready }) => <SchedulePanel session={session} ready={ready} />}
     </AdminShell>

@@ -660,6 +660,32 @@ export async function cancelBooking(input: {
   return (data as DbBooking | null) ?? null;
 }
 
+/** Mark an open booking as no-show (staff). Frees capacity like cancel. */
+export async function markBookingNoShow(input: {
+  booking_id: string;
+  notes?: string;
+}): Promise<DbBooking | null> {
+  const supabase = createBookingAdminClient();
+  if (!supabase) throw new Error("Supabase not configured");
+
+  const { data, error } = await supabase
+    .from("bookings")
+    .update({
+      status: "no_show",
+      notes: input.notes ?? "marked no-show",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", input.booking_id)
+    .in("status", ["pending", "confirmed"])
+    .select("id, status, starts_at, timezone, catalog_item_id, contact_id")
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`bookings no_show failed: ${error.message}`);
+  }
+  return (data as DbBooking | null) ?? null;
+}
+
 export async function createBooking(input: {
   team_id: string;
   bot_id: string;
