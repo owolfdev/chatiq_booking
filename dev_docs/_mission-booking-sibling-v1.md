@@ -1,7 +1,7 @@
 # Mission: Booking sibling v1 (`chatiq-booking`)
 
 Last updated: 2026-10-24  
-Status: **In progress** — **Phase 1 ✅ + Phase 2 ✅**. **Phase 3a ~90%**: live LINE↔web link + post-merge web lookup verified (2026-10-24). Remaining: web→LINE short-code smoke, both-channel link notifications, contact enrichment → then **Phase 3b.0** catalog/hours → **Phase 3b** admin → later **resources** / **stays** shape modules. Design: [`booking-command-library.md`](./booking-command-library.md) · Identity: [`identity-and-account-linking.md`](./identity-and-account-linking.md) · Catalog: [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) · Modules: [`base-and-shape-modules.md`](./base-and-shape-modules.md).  
+Status: **In progress** — **Phase 1 ✅ + Phase 2 ✅**. **Phase 3a ~93%**: both-direction channel link smokes verified (LINE→web 2026-10-24; web→LINE 2026-10-25). Remaining: both-channel link notifications, contact enrichment → then **Phase 3b.0** catalog/hours → **Phase 3b** admin → later **resources** / **stays**. Design: [`booking-command-library.md`](./booking-command-library.md) · Identity: [`identity-and-account-linking.md`](./identity-and-account-linking.md) · Catalog: [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) · Modules: [`base-and-shape-modules.md`](./base-and-shape-modules.md).  
 Owner: Engineering
 
 ## Resume here (next session)
@@ -11,11 +11,11 @@ Owner: Engineering
 1. ~~**Phase 1 — Tool-ready sibling**~~ ✅ **DONE 2026-10-21** (see WS-F; smoke 20/20 locally + on Vercel).
 2. ~~**Phase 2 — LLM concierge**~~ ✅ **DONE 2026-10-21** (live-smoked EN/TH/ZH, see Progress Log). Enabled by `BOOKING_CONCIERGE=llm` (set in local `chatiq/.env.local`; add to Vercel env when deploying concierge to prod chat).
 3. **Phase 3a — Identity & account linking** — **← CONTINUE HERE** (spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md)):
-   - ~~Consent go-live + LINE book + LINE→web consent merge + post-merge web lookup~~ ✅ **2026-10-24** (see Progress Log EOD).
-   - **Tomorrow first:** **web→LINE** — from a signed-in web chat (or pilot web bot), issue a connect code; redeem that short code in the **LINE** OA chat; confirm both doors still see the same booking.
-   - **Then build:** both-channel “accounts linked” tripwire notifications (not built; required by DoD).
+   - ~~Consent go-live + LINE book + LINE→web + post-merge web lookup~~ ✅ **2026-10-24**.
+   - ~~**web→LINE** short-code~~ ✅ **2026-10-25** — web issued `915412`; LINE redeem → linked + saw Tue 27 Oct 10:00 booking.
+   - **Do this next — build:** both-channel “accounts linked” tripwire notifications (not built; required by DoD).
    - **Then:** contact enrichment (LINE display name; web name/email at redemption — display only).
-   - Optional quick check: new LINE conversation still finds the Tue 10:00 booking (LINE user-id persistence).
+   - Optional: new LINE conversation still finds the Tue 10:00 booking (LINE user-id persistence).
 4. **Phase 3b.0 — Service catalog & hours** (design locked; **do not implement until 3a leftovers done**): [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) — owner CRUD for 1–100 services, hours/blocks, `search_services`, shared calendar v1. Constrained by [`base-and-shape-modules.md`](./base-and-shape-modules.md) (appointments shape; don’t encode staff as fake services; leave room for `resource_id` / `ends_at`).
 5. **Phase 3b — Admin doors**: console (calendar/table, command buttons, ⌘K, commands reference, audit incl. identity audit + unmerge) → copilot with confirm-cards. Services/Hours UI is part of this console (3b.0 first).
 6. Later shapes — **`resources`** (clinic any/specific clinician), then **`stays`** (hotel nights) — modules doc. Not separate apps.
@@ -95,8 +95,8 @@ Spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md). Do
 - [x] Migration: `connect_tokens` (hashed, one-time, 10-min), `identity_audit_log`, `contacts.merged_into`/status — applied 2026-10-23 via Supabase CLI (`db push`)
 - [x] `booking.create_connect_token` / `booking.redeem_connect_token` / `booking.get_customer`; merge is internal-only, deterministic survivor rule, tombstone + audit, `MERGE_CONFLICT` aborts safely
 - [x] API exit tests (no LLM): `npm run smoke:identity` **19/19 on Vercel** — happy-path merge unifies bookings from both sides; wrong code `TOKEN_INVALID`; reuse `TOKEN_USED`; expired (backdated) code `TOKEN_EXPIRED` (2026-10-23)
-- [x] Channel smokes (partial, live 2026-10-24): LINE book on `chatiq-line-guide`; LINE→web consent merge; post-merge lookup from **web** `/chat/chatiq-line-guide` sees Tue 10:00 booking
-- [ ] Channel smokes (remaining): web→LINE short-code redemption in LINE chat; optional re-check LINE-door lookup / new LINE thread persistence; both-channel "accounts linked" notification (**not built**)
+- [x] Channel smokes (live): LINE book; LINE→web consent; post-merge web lookup (2026-10-24); **web→LINE short-code** (2026-10-25) — LINE confirmed link + Tue 10:00 booking
+- [ ] Channel smokes (remaining): optional re-check new LINE thread persistence; both-channel "accounts linked" notification (**not built**)
 - [x] Concierge linking conversation built + **live EN→TH smoke PASS 2026-10-24** (`chatiq/tests/booking-sibling-concierge-live.test.ts`; unit 12/12; sibling timeout raised for merge)
 - [x] Consent page built + **go-live 2026-10-24** + **signed-in Link-accounts PASS** (live LINE token)
 - [ ] Contact enrichment: LINE display-name snapshot; web name/email copied at redemption (display only)
@@ -152,8 +152,8 @@ Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b.0 catalog/
 - [x] API exit tests: `scripts/smoke-identity.mjs` incl. cross-bot full-token redeem + `TOKEN_EXPIRED`
 - [x] Concierge linking conversation: identity tools + prompt + consent gate; unit 12/12; **live EN→TH smoke PASS 2026-10-24**
 - [x] Consent page go-live + signed-in redeem PASS; `BOOKING_CONNECT_URL_BASE` on booking Vercel
-- [x] Channel: LINE book + LINE→web link + post-merge **web** lookup PASS (2026-10-24)
-- [ ] Channel: web→LINE short-code; both-channel link notifications; admin unmerge lands in WS-H
+- [x] Channel: LINE book + LINE→web + post-merge web lookup (2026-10-24); web→LINE short-code (2026-10-25)
+- [ ] Channel: both-channel link notifications; admin unmerge lands in WS-H
 
 ### WS-D — Archive legacy
 
@@ -196,6 +196,20 @@ Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b.0 catalog/
 - [ ] Copilot: NL → confirm-card → execute; customer notification on admin changes
 
 ## 4) Progress Log
+
+### 2026-10-25 — web→LINE short-code smoke PASS
+
+**Verified (prod)**
+- Already linked customer (LINE→web from 2026-10-24): web `/chat/chatiq-line-guide` issued code `915412` (+ connect URL unused for this direction).
+- LINE OA redeem → “accounts are now linked” + **one upcoming** Consultation **Tue 27 Oct 2026 10:00 Asia/Bangkok**.
+
+**Approx. toward DoD:** Phase 3a **~93%**.
+
+```text
+chatiq-booking: Phase 3a (identity): [###################_] ~93% -> DoD
+```
+
+**Next:** build both-channel “accounts linked” tripwire notifications; then contact enrichment.
 
 ### 2026-10-24 — Base + shape modules architecture locked (connectability)
 
