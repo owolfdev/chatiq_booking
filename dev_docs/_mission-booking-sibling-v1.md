@@ -12,7 +12,7 @@ Owner: Engineering
 2. ~~**Phase 2 — LLM concierge**~~ ✅ **DONE 2026-10-21** (live-smoked EN/TH/ZH, see Progress Log). Enabled by `BOOKING_CONCIERGE=llm` (set in local `chatiq/.env.local`; add to Vercel env when deploying concierge to prod chat).
 3. ~~**Phase 3a — Identity & account linking**~~ ✅ **DONE 2026-10-25** (spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md)).
 4. ~~**Phase 3b.0 — Service catalog & hours**~~ ✅ **DONE 2026-10-25** ([`service-catalog-and-availability.md`](./service-catalog-and-availability.md)): schema, admin commands, Services/Hours UI. *Deferred later:* large-catalog concierge prompt rules (`search_services` command already live).
-5. **Phase 3b — Admin doors** — **← CONTINUE**: Console + copilot confirm-cards done. **Next:** customer notify-on-admin-change via ChatIQ; then Later shapes (resources/stays).
+5. **Phase 3b — Admin doors** — **✅ essentially complete** (console + copilot + customer notify). **Next (Later):** large-catalog concierge prompts; **resources** / **stays** shapes.
 6. Later shapes — **`resources`** (clinic any/specific clinician), then **`stays`** (hotel nights) — modules doc. Not separate apps.
 7. Parallel/later — large-catalog concierge prompts; widen `BOOKING_SIBLING_BOT_IDS`; WS-D legacy code archive; payments; `BOOKING_CONCIERGE=llm` on ChatIQ Vercel if needed.
 
@@ -117,7 +117,7 @@ Done when **human agents can run the same operations directly and via natural la
 - [x] Commands reference page + ⌘K palette listing every command, inputs, and who may run it (2026-10-25 slice 4)
 - [x] Actor scope enforced (customer=own; staff/provider=team bot calendar in v1) + mutation audit log (2026-10-25 slice 5)
 - [x] Admin copilot: NL → proposed command card → Confirm/Edit/Dismiss; read-only via confirm (2026-10-25 slice 6)
-- [ ] Admin changes notify the customer in their language via ChatIQ (follow-on)
+- [x] Admin changes notify the customer via ChatIQ (LINE + web; EN/TH/zh) (2026-10-25 slice 7)
 
 ### Overall v1 DoD
 
@@ -198,9 +198,26 @@ Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b.0 catalog/
 - [x] Commands reference + ⌘K palette (`/admin/commands`, catalog-driven) (2026-10-25)
 - [x] Actor scopes + `command_audit_log` + `/admin/audit` (2026-10-25)
 - [x] Copilot: NL → confirm-card → execute (`/admin/copilot`, 2026-10-25)
-- [ ] Customer notification on admin changes via ChatIQ
+- [x] Customer notification on admin changes via ChatIQ (2026-10-25)
 
 ## 4) Progress Log
+
+### 2026-10-25 — Phase 3b console slice 7 (staff-change customer notify)
+
+**What changed**
+- ChatIQ `POST /api/booking/admin-change-notify` + `notifyBookingAdminChange` (LINE push + web chat notice; EN/TH bilingual, zh when locale set).
+- Booking sibling fires notify after staff cancel / reschedule / no-show / create-on-behalf (best-effort; derived from `BOOKING_CONNECT_URL_BASE` or `BOOKING_ADMIN_NOTIFY_URL`).
+- User docs updated for notify-on-change.
+
+**Verified:** typecheck both repos.
+
+**Approx. toward DoD:** Phase 3b **~100%** (v1 admin doors).
+
+```text
+chatiq-booking: Phase 3b (admin console): [####################] ~100% -> DoD
+```
+
+**Next:** Later — large-catalog concierge prompts; resources / stays.
 
 ### 2026-10-25 — Phase 3b console slice 6 (admin copilot + user docs)
 

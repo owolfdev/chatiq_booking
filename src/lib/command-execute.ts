@@ -12,6 +12,10 @@ import {
 } from "@/lib/availability";
 import { COMMAND_CATALOG } from "@/lib/admin/command-catalog";
 import {
+  notifyChatIqAdminBookingChange,
+  type AdminNotifyKind,
+} from "@/lib/admin-notify-chatiq";
+import {
   BOOKING_API_CONTRACT_VERSION,
   type BookingCommandExecuteRequest,
   type BookingCommandExecuteResponse,
@@ -205,6 +209,35 @@ export async function executeBookingCommand(
 
   try {
     const items = await listCatalogItems({ team_id, bot_id });
+
+    const notifyCustomer = (
+      kind: AdminNotifyKind,
+      input: {
+        contact_id: string;
+        starts_at?: string | null;
+        previous_starts_at?: string | null;
+        timezone?: string | null;
+        catalog_item_id?: string | null;
+      }
+    ) => {
+      if (!isStaff && !isSystem) return;
+      const service_title =
+        input.catalog_item_id && items.length
+          ? items.find((i) => i.id === input.catalog_item_id)?.title ?? null
+          : null;
+      const locale = typeof slots.locale === "string" ? slots.locale : null;
+      void notifyChatIqAdminBookingChange({
+        team_id,
+        bot_id,
+        contact_id: input.contact_id,
+        kind,
+        starts_at: input.starts_at,
+        previous_starts_at: input.previous_starts_at,
+        timezone: input.timezone ?? timezone,
+        service_title,
+        locale,
+      });
+    };
 
     if (command === "booking.list_services") {
       const includeInactive =
@@ -908,6 +941,12 @@ export async function executeBookingCommand(
             catalog_item_id: booking.catalog_item_id,
           },
         });
+        notifyCustomer("created", {
+          contact_id: contactId,
+          starts_at: booking.starts_at,
+          timezone: booking.timezone,
+          catalog_item_id: booking.catalog_item_id,
+        });
         return ok(command, {
           contact_id: contactId,
           booking: {
@@ -965,6 +1004,12 @@ export async function executeBookingCommand(
           status: marked?.status ?? "no_show",
         },
       });
+      notifyCustomer("no_show", {
+        contact_id: target.contact_id ?? contactId,
+        starts_at: target.starts_at,
+        timezone: target.timezone,
+        catalog_item_id: target.catalog_item_id,
+      });
       return ok(command, {
         contact_id: contactId,
         booking: marked
@@ -1019,6 +1064,12 @@ export async function executeBookingCommand(
           booking_id: existing.id,
           status: cancelled?.status ?? "cancelled",
         },
+      });
+      notifyCustomer("cancelled", {
+        contact_id: existing.contact_id ?? contactId,
+        starts_at: existing.starts_at,
+        timezone: existing.timezone,
+        catalog_item_id: existing.catalog_item_id,
       });
       return ok(command, {
         contact_id: contactId,
@@ -1087,6 +1138,13 @@ export async function executeBookingCommand(
         status: created.status,
         starts_at: created.starts_at,
       },
+    });
+    notifyCustomer("rescheduled", {
+      contact_id: existing.contact_id ?? contactId,
+      starts_at: created.starts_at,
+      previous_starts_at: existing.starts_at,
+      timezone: created.timezone,
+      catalog_item_id: created.catalog_item_id ?? existing.catalog_item_id,
     });
     return ok(command, {
       contact_id: contactId,

@@ -97,6 +97,18 @@ async function listBindings(contactId: string): Promise<DbBinding[]> {
   return (data ?? []) as DbBinding[];
 }
 
+/** Public: channel accounts for a contact (admin notify, etc.). */
+export async function listIdentityBindingsForContact(
+  contactId: string
+): Promise<Array<{ provider: string; external_id: string; verified: boolean }>> {
+  const rows = await listBindings(contactId);
+  return rows.map((b) => ({
+    provider: b.provider,
+    external_id: b.external_id,
+    verified: b.verified,
+  }));
+}
+
 /**
  * Deterministic merge of two contacts (internal — called by token
  * redemption and, later, admin tooling; never directly by the LLM).

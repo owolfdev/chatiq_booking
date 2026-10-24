@@ -98,7 +98,7 @@ function CopilotPanel({
       setResult(JSON.stringify(exec.data ?? {}, null, 2));
       if (proposal.mutating) {
         setNotifyNote(
-          "Customer notify-on-change is queued for ChatIQ delivery (pilot: check Audit; channel push follows next)."
+          "If ChatIQ notify is configured, the customer was messaged on LINE/web about this change."
         );
       }
       setProposal(null);
