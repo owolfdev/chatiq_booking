@@ -108,6 +108,7 @@ Deterministic in/out, **no customer prose, no natural-language parsing**. Auth: 
   "identity_claims": [
     { "provider": "chatiq_conversation", "external_id": "…", "verified": false }
   ],
+  "contact_profile": { "name": "Oliver", "email": "oliver@example.com" },
   "conversation_id": null,
   "timezone": "Asia/Bangkok"
 }
@@ -128,6 +129,12 @@ Deterministic in/out, **no customer prose, no natural-language parsing**. Auth: 
 Identity model & linking ceremony: [`identity-and-account-linking.md`](./identity-and-account-linking.md). Requires migration `20261023000000_identity_linking.sql`.
 
 Identity: provide `slots.contact_id`, or `identity_claims` / `conversation_id` (resolved to a booking contact). Customer actors can only act on their own bookings; staff actors (`agent`/`admin`/`provider`) may act team-wide (Phase 3 UI).
+
+Optional `contact_profile` `{ name?, email? }` is **display enrichment only** (fills blank/`Guest` on `contacts`); never used as merge keys.
+
+### Keepalive cron
+
+`GET|POST /api/cron/update` — inserts one row into table `"update"`. Auth: `Authorization: Bearer <CRON_SECRET>` (Vercel Cron) or booking service token. Schedule in `vercel.json`: daily `0 12 * * *`.
 
 ### Success / failure
 

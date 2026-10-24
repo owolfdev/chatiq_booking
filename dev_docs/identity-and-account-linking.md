@@ -24,10 +24,10 @@ Design context: [`booking-command-library.md`](./booking-command-library.md)
 | LINE book + LINE→web link + post-merge **web** lookup | ✅ Live on `chatiq-line-guide` (2026-10-24) |
 | web→LINE short-code in chat | ✅ Live 2026-10-25 |
 | Both-channel “accounts linked” notification | ✅ Built (ChatIQ LINE push + web notice); live-verify on fresh merge pending |
-| Contact enrichment (LINE name; web email at redeem) | ❌ Not built |
+| Contact enrichment (LINE name; web email at redeem) | ✅ Built (2026-10-25) — `contact_profile` on turn/commands; fills `contacts.name`/`email` (display only) |
 | Admin bindings view / unmerge | ❌ Phase 3b |
 
-**Still open:** tripwire live-verify + enrichment. Linked customers already share bookings across doors once claims resolve (web chat threads stay separate from LINE threads).
+**Still open:** tripwire live-verify on a fresh merge. Linked customers already share bookings across doors once claims resolve (web chat threads stay separate from LINE threads).
 
 ## 3) The one security rule
 
@@ -80,7 +80,7 @@ Claims hygiene alongside: only **verified** claims may ever be merge keys; `chat
 3. **API exit tests** (extend smoke style): issue→redeem happy path merges two contacts with bookings on both sides → one customer sees both; expired token rejected; reused token rejected; wrong-team token rejected; binding pointing at third customer → `MERGE_CONFLICT`, nothing merged.
 4. **Channel smokes:** (a) LINE persistence — book on a LINE-connected bot, new conversation, lookup finds it; (b) LINE→web link — book on LINE, link, web lookup sees it; (c) web→LINE link via short code in chat; (d) post-merge notification content checked on both channels (or logged delivery in pilot).
 5. Concierge surface: offer + code redemption conversation (EN/TH at minimum), still with zero existence disclosure pre-merge.
-6. Contact enrichment (small, alongside): LINE display name snapshot on contact; web profile name/email copied at redemption (display only — not merge keys unless verified later).
+6. Contact enrichment ✅: ChatIQ sends optional `contact_profile` `{ name, email }` on turns/commands (LINE `line_display_name` from `source_detail`; web login name/email at redeem and signed-in chat). Sibling `enrichContactDisplay` fills blanks / `Guest` on `contacts` — display only, never merge keys.
 
 ## 8) Explicitly deferred / open
 

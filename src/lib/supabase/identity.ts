@@ -221,13 +221,19 @@ export async function mergeContacts(input: {
     }
   }
 
-  // Keep a real display name if the survivor only has the placeholder.
+  // Keep display fields if the survivor only has placeholders.
   const survivorIsPlaceholder = !survivor.name || survivor.name === "Guest";
-  const mergedHasName = merged.name && merged.name !== "Guest";
-  if (survivorIsPlaceholder && mergedHasName) {
+  const mergedHasName = Boolean(merged.name && merged.name !== "Guest");
+  const survivorLacksEmail = !survivor.email?.trim();
+  const mergedHasEmail = Boolean(merged.email?.trim());
+  if ((survivorIsPlaceholder && mergedHasName) || (survivorLacksEmail && mergedHasEmail)) {
     await supabase
       .from("contacts")
-      .update({ name: merged.name, updated_at: new Date().toISOString() })
+      .update({
+        ...(survivorIsPlaceholder && mergedHasName ? { name: merged.name } : {}),
+        ...(survivorLacksEmail && mergedHasEmail ? { email: merged.email } : {}),
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", survivor.id);
   }
 

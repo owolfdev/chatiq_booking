@@ -1,7 +1,7 @@
 # Mission: Booking sibling v1 (`chatiq-booking`)
 
 Last updated: 2026-10-24  
-Status: **In progress** — **Phase 1 ✅ + Phase 2 ✅**. **Phase 3a ~96%**: both-direction links live + tripwire notifications built (2026-10-25). Remaining: live-verify tripwire + contact enrichment → then **Phase 3b.0** catalog/hours → **Phase 3b** admin → later **resources** / **stays**. Design: [`booking-command-library.md`](./booking-command-library.md) · Identity: [`identity-and-account-linking.md`](./identity-and-account-linking.md) · Catalog: [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) · Modules: [`base-and-shape-modules.md`](./base-and-shape-modules.md).  
+Status: **In progress** — **Phase 1 ✅ + Phase 2 ✅**. **Phase 3a ~98%**: both-direction links + tripwire + **contact enrichment** (2026-10-25). Remaining: live-verify tripwire (fresh merge) → then **Phase 3b.0** catalog/hours → **Phase 3b** admin → later **resources** / **stays**. Design: [`booking-command-library.md`](./booking-command-library.md) · Identity: [`identity-and-account-linking.md`](./identity-and-account-linking.md) · Catalog: [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) · Modules: [`base-and-shape-modules.md`](./base-and-shape-modules.md).  
 Owner: Engineering
 
 ## Resume here (next session)
@@ -10,11 +10,12 @@ Owner: Engineering
 
 1. ~~**Phase 1 — Tool-ready sibling**~~ ✅ **DONE 2026-10-21** (see WS-F; smoke 20/20 locally + on Vercel).
 2. ~~**Phase 2 — LLM concierge**~~ ✅ **DONE 2026-10-21** (live-smoked EN/TH/ZH, see Progress Log). Enabled by `BOOKING_CONCIERGE=llm` (set in local `chatiq/.env.local`; add to Vercel env when deploying concierge to prod chat).
-3. **Phase 3a — Identity & account linking** — **← CONTINUE HERE** (spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md)):
+3. **Phase 3a — Identity & account linking** — **← ALMOST DONE** (spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md)):
    - ~~Consent go-live + LINE book + LINE→web + post-merge web lookup~~ ✅ **2026-10-24**.
    - ~~**web→LINE** short-code~~ ✅ **2026-10-25** — web issued `915412`; LINE redeem → linked + saw Tue 27 Oct 10:00 booking.
    - ~~Both-channel “accounts linked” tripwire~~ ✅ **built 2026-10-25** (ChatIQ: LINE push + web conversation notice after fresh merge; skip `already_linked`). **Verify next:** fresh merge (or second pair) and confirm both doors receive the tripwire copy.
-   - **Then:** contact enrichment (LINE display name; web name/email at redemption — display only).
+   - ~~Contact enrichment~~ ✅ **2026-10-25** — `contact_profile` fills `contacts.name`/`email` (LINE display name; web name/email) — display only.
+   - Ops: daily Supabase keepalive — table `"update"` + `GET/POST /api/cron/update` + Vercel cron `0 12 * * *` (apply migration `20261025000000_update_keepalive.sql`; set `CRON_SECRET` on booking Vercel).
    - Optional: new LINE conversation still finds the Tue 10:00 booking (LINE user-id persistence).
 4. **Phase 3b.0 — Service catalog & hours** (design locked; **do not implement until 3a leftovers done**): [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) — owner CRUD for 1–100 services, hours/blocks, `search_services`, shared calendar v1. Constrained by [`base-and-shape-modules.md`](./base-and-shape-modules.md) (appointments shape; don’t encode staff as fake services; leave room for `resource_id` / `ends_at`).
 5. **Phase 3b — Admin doors**: console (calendar/table, command buttons, ⌘K, commands reference, audit incl. identity audit + unmerge) → copilot with confirm-cards. Services/Hours UI is part of this console (3b.0 first).
@@ -100,7 +101,8 @@ Spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md). Do
 - [ ] Live-verify tripwire on a fresh merge; optional new LINE thread persistence check
 - [x] Concierge linking conversation built + **live EN→TH smoke PASS 2026-10-24** (`chatiq/tests/booking-sibling-concierge-live.test.ts`; unit 12/12; sibling timeout raised for merge)
 - [x] Consent page built + **go-live 2026-10-24** + **signed-in Link-accounts PASS** (live LINE token)
-- [ ] Contact enrichment: LINE display-name snapshot; web name/email copied at redemption (display only)
+- [x] Contact enrichment: LINE display-name snapshot; web name/email via `contact_profile` (display only) — 2026-10-25
+- [x] Daily DB keepalive: `"update"` table + `/api/cron/update` + Vercel cron (migration apply + `CRON_SECRET` on deploy)
 
 ### Phase 3b.0 — Service catalog & availability (before / with admin console)
 
@@ -198,6 +200,26 @@ Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b.0 catalog/
 - [ ] Copilot: NL → confirm-card → execute; customer notification on admin changes
 
 ## 4) Progress Log
+
+### 2026-10-25 — Contact enrichment + daily `"update"` keepalive
+
+**What changed**
+- Contract: optional `contact_profile` `{ name, email }` on turns + commands (both repos).
+- Sibling: `enrichContactDisplay` fills blank/`Guest` on `contacts`; create path stores name/email; merge copies email onto survivor when missing.
+- ChatIQ: passes LINE `line_display_name` (and peers) from `source_detail`; signed-in web email/name on chat + consent redeem.
+- Smoke: `smoke-identity.mjs` asserts enrichment before/after merge.
+- Ops: migration `20261025000000_update_keepalive.sql` → table `"update"`; `GET|POST /api/cron/update`; `vercel.json` daily `0 12 * * *`. Auth: `CRON_SECRET` (or service token).
+
+**Verified:** typecheck (pending this session). Apply migration + set `CRON_SECRET` on booking Vercel before relying on cron.
+
+**Approx. toward DoD:** Phase 3a **~98%**.
+
+```text
+chatiq-booking: Phase 3a (identity): [###################_] ~98% -> DoD
+chatiq:         Phase 3a surfaces:   [###################_] ~98% -> DoD
+```
+
+**Next:** apply keepalive migration + deploy; live-verify tripwire on a fresh merge; then Phase 3b.0 catalog.
 
 ### 2026-10-25 — Both-channel link tripwire notifications built
 

@@ -58,6 +58,9 @@ async function exec(command, slots, identity, opts = {}) {
       timezone: TZ,
       actor: { type: "customer" },
       identity_claims: [identity],
+      ...(opts.contact_profile
+        ? { contact_profile: opts.contact_profile }
+        : {}),
     }),
   });
   const json = await res.json().catch(() => ({}));
@@ -79,8 +82,18 @@ try {
   const slotB = (availWeb.json.data?.slots ?? []).find((s) => s.starts_at !== slotA?.starts_at) ?? availWeb.json.data?.slots?.[1];
   check("availability for both doors", Boolean(slotA && slotB), JSON.stringify({ slotA, slotB }));
 
-  const bookA = await exec("booking.create", { starts_at: slotA.starts_at }, lineIdentity);
-  const bookB = await exec("booking.create", { starts_at: slotB.starts_at }, webIdentity);
+  const bookA = await exec(
+    "booking.create",
+    { starts_at: slotA.starts_at },
+    lineIdentity,
+    { contact_profile: { name: "Smoke LINE Oliver" } }
+  );
+  const bookB = await exec(
+    "booking.create",
+    { starts_at: slotB.starts_at },
+    webIdentity,
+    { contact_profile: { name: "Smoke Web Pat", email: `smoke-web-${stamp}@example.com` } }
+  );
   check("LINE-side booking created", bookA.json.ok === true, JSON.stringify(bookA.json));
   check("web-side booking created", bookB.json.ok === true, JSON.stringify(bookB.json));
   const idA = bookA.json.data?.booking?.id;
@@ -93,6 +106,17 @@ try {
   const lineContactId = lineCustomer.json.data?.contact?.id;
   const webContactId = webCustomer.json.data?.contact?.id;
   check("two distinct customers before link", Boolean(lineContactId && webContactId && lineContactId !== webContactId));
+  check(
+    "LINE contact enriched with display name",
+    lineCustomer.json.data?.contact?.name === "Smoke LINE Oliver",
+    JSON.stringify(lineCustomer.json.data?.contact)
+  );
+  check(
+    "web contact enriched with name+email",
+    webCustomer.json.data?.contact?.name === "Smoke Web Pat" &&
+      webCustomer.json.data?.contact?.email === `smoke-web-${stamp}@example.com`,
+    JSON.stringify(webCustomer.json.data?.contact)
+  );
   check(
     "LINE customer sees only own booking",
     (lineCustomer.json.data?.upcoming_bookings ?? []).some((b) => b.id === idA) &&
@@ -201,6 +225,18 @@ try {
   check("survivor holds both channel bindings", providers.includes("line") && providers.includes("web_user"), providers.join(","));
   const upcomingIds = (afterWeb.json.data?.upcoming_bookings ?? []).map((b) => b.id);
   check("merged customer sees both bookings", upcomingIds.includes(idA) && upcomingIds.includes(idB), upcomingIds.join(","));
+  // Survivor prefers verified web; display fields should keep a real name + email.
+  const survivorContact = afterWeb.json.data?.contact;
+  check(
+    "survivor keeps enriched email after merge",
+    survivorContact?.email === `smoke-web-${stamp}@example.com`,
+    JSON.stringify(survivorContact)
+  );
+  check(
+    "survivor has a real display name (not Guest)",
+    Boolean(survivorContact?.name) && survivorContact.name !== "Guest",
+    JSON.stringify(survivorContact)
+  );
 
   const existing = await exec("booking.get_existing", {}, lineIdentity);
   check("get_existing works from LINE door after merge", existing.json.ok && Boolean(existing.json.data?.booking));

@@ -28,9 +28,9 @@ supabase link --project-ref crxwmkegmrusndpocntu
 supabase db push
 ```
 
-Tables: `contacts`, `identity_bindings`, `booking_sessions`, `catalog_items`, `bookings`.
+Tables: `contacts`, `identity_bindings`, `booking_sessions`, `catalog_items`, `bookings`, `"update"` (daily cron keepalive).
 
-Also apply later migrations in order (e.g. `20261019000001_booking_slot_unique.sql` — cancels duplicate active slots, then unique index).
+Also apply later migrations in order (e.g. `20261019000001_booking_slot_unique.sql` — cancels duplicate active slots, then unique index; `20261023000000_identity_linking.sql`; `20261025000000_update_keepalive.sql`).
 
 ## 3) Verify
 

@@ -132,6 +132,8 @@ export async function handleTurn(
     const contact = await resolveOrCreateContact({
       team_id: body.team_id,
       claims: body.identity_claims,
+      name: body.contact_profile?.name,
+      email: body.contact_profile?.email,
     });
     const session = await getOrCreateSession({
       team_id: body.team_id,

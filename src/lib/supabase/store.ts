@@ -38,10 +38,80 @@ export async function probeSupabasePersistence(): Promise<{
   return { ok: true };
 }
 
+function normalizeProfileText(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function isPlaceholderContactName(name: string | null | undefined): boolean {
+  const n = normalizeProfileText(name);
+  return !n || n.toLowerCase() === "guest";
+}
+
+/**
+ * Fill display fields on a contact when we learn them from a channel.
+ * Display only — never used as merge keys. Fills blanks / "Guest"; does not
+ * overwrite a real name or email already stored.
+ */
+export async function enrichContactDisplay(input: {
+  team_id: string;
+  contact_id: string;
+  name?: string | null;
+  email?: string | null;
+}): Promise<DbContact | null> {
+  const supabase = createBookingAdminClient();
+  if (!supabase) return null;
+
+  const hintName = normalizeProfileText(input.name);
+  const hintEmail = normalizeProfileText(input.email)?.toLowerCase() ?? null;
+  if (!hintName && !hintEmail) return null;
+
+  let contact = await getContactById({
+    team_id: input.team_id,
+    contact_id: input.contact_id,
+  });
+  if (!contact) return null;
+
+  // Prefer the surviving customer after a merge.
+  if (contact.merged_into) {
+    const survivor = await getContactById({
+      team_id: input.team_id,
+      contact_id: contact.merged_into,
+    });
+    if (survivor) contact = survivor;
+  }
+
+  const patch: { name?: string; email?: string; updated_at: string } = {
+    updated_at: new Date().toISOString(),
+  };
+  if (hintName && isPlaceholderContactName(contact.name)) {
+    patch.name = hintName;
+  }
+  if (hintEmail && !normalizeProfileText(contact.email)) {
+    patch.email = hintEmail;
+  }
+  if (!patch.name && !patch.email) {
+    return contact;
+  }
+
+  const { data: updated, error } = await supabase
+    .from("contacts")
+    .update(patch)
+    .eq("id", contact.id)
+    .select("id, team_id, name, email, phone, created_at, merged_into")
+    .single();
+  if (error) {
+    throw new Error(`contacts enrich failed: ${error.message}`);
+  }
+  return (updated as DbContact) ?? contact;
+}
+
 export async function resolveOrCreateContact(input: {
   team_id: string;
   claims?: IdentityBindingClaim[];
   name?: string | null;
+  email?: string | null;
 }): Promise<DbContact> {
   const supabase = createBookingAdminClient();
   if (!supabase) {
@@ -82,6 +152,9 @@ export async function resolveOrCreateContact(input: {
     (a, b) => claimStrength(b.provider) - claimStrength(a.provider)
   );
 
+  const createName =
+    normalizeProfileText(input.name) ?? "Guest";
+
   for (const claim of orderedClaims) {
     const { data: binding, error: bindingError } = await supabase
       .from("identity_bindings")
@@ -97,13 +170,21 @@ export async function resolveOrCreateContact(input: {
     if (binding?.contact_id) {
       const { data: contact, error: contactError } = await supabase
         .from("contacts")
-        .select("id, team_id, name, email, phone")
+        .select("id, team_id, name, email, phone, created_at, merged_into")
         .eq("id", binding.contact_id)
         .maybeSingle();
       if (contactError) {
         throw new Error(`contacts lookup failed: ${contactError.message}`);
       }
-      if (contact) return contact as DbContact;
+      if (contact) {
+        const enriched = await enrichContactDisplay({
+          team_id: input.team_id,
+          contact_id: contact.id,
+          name: input.name,
+          email: input.email,
+        });
+        return (enriched ?? (contact as DbContact)) as DbContact;
+      }
     }
   }
 
@@ -111,9 +192,10 @@ export async function resolveOrCreateContact(input: {
     .from("contacts")
     .insert({
       team_id: input.team_id,
-      name: input.name ?? "Guest",
+      name: createName,
+      email: normalizeProfileText(input.email)?.toLowerCase() ?? null,
     })
-    .select("id, team_id, name, email, phone")
+    .select("id, team_id, name, email, phone, created_at, merged_into")
     .single();
 
   if (createError || !created) {

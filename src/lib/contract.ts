@@ -11,6 +11,15 @@ export type IdentityBindingClaim = {
   verified?: boolean;
 };
 
+/**
+ * Display-only hints from the channel (LINE display name, web login email).
+ * Never used as merge keys — linking still requires the connect-token ceremony.
+ */
+export type ContactProfileHint = {
+  name?: string | null;
+  email?: string | null;
+};
+
 export type BookingTurnRequest = {
   contract_version: typeof BOOKING_API_CONTRACT_VERSION;
   team_id: string;
@@ -22,6 +31,8 @@ export type BookingTurnRequest = {
   /** IANA timezone hint; pilot default Asia/Bangkok */
   timezone?: string | null;
   identity_claims?: IdentityBindingClaim[];
+  /** Optional display enrichment (name/email) — see identity-and-account-linking.md */
+  contact_profile?: ContactProfileHint | null;
   session_id?: string | null;
   /** Closed catalog command; see commands.ts / booking-command-library.md */
   command?: string | null;
@@ -73,6 +84,8 @@ export type BookingCommandExecuteRequest = {
   slots?: Record<string, unknown> | null;
   actor?: BookingActor | null;
   identity_claims?: IdentityBindingClaim[];
+  /** Optional display enrichment (name/email) — not merge keys */
+  contact_profile?: ContactProfileHint | null;
   conversation_id?: string | null;
   timezone?: string | null;
 };

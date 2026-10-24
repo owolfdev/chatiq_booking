@@ -24,6 +24,7 @@ import {
 import {
   cancelBooking,
   createBooking,
+  enrichContactDisplay,
   getBookingById,
   getContactById,
   getLatestOpenBooking,
@@ -230,6 +231,8 @@ export async function executeBookingCommand(
       const contact = await resolveOrCreateContact({
         team_id,
         claims: mergedClaims,
+        name: body.contact_profile?.name,
+        email: body.contact_profile?.email,
       });
       contactId = contact.id;
     } else {
@@ -237,6 +240,12 @@ export async function executeBookingCommand(
       if (!contact) {
         return fail(command, "CONTACT_NOT_FOUND", `Unknown contact: ${contactId}`);
       }
+      await enrichContactDisplay({
+        team_id,
+        contact_id: contactId,
+        name: body.contact_profile?.name,
+        email: body.contact_profile?.email,
+      });
     }
 
     if (command === "booking.create_connect_token") {
