@@ -1694,8 +1694,15 @@ export async function executeBookingCommand(
     }
 
     // booking.reschedule: create the new booking first so a conflict
-    // never loses the original appointment.
-    const svc = resolveService(items, slots);
+    // never loses the original appointment. Default service to the
+    // existing booking when the catalog has multiple services.
+    const svc = existing.catalog_item_id
+      ? (() => {
+          const item = items.find((i) => i.id === existing.catalog_item_id);
+          if (item) return { item };
+          return resolveService(items, slots);
+        })()
+      : resolveService(items, slots);
     if ("error" in svc) return { ...svc.error, command };
     const newStart = str(slots, "new_starts_at", "starts_at", "slot");
     if (!newStart || Number.isNaN(new Date(newStart).getTime())) {
