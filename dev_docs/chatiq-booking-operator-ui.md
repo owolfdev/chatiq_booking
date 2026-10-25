@@ -56,7 +56,7 @@ Do **not** wire legacy UI to the sibling as a shortcut — replace it.
 ## 6) Implementation order (Track C)
 
 1. ~~ChatIQ server helper: execute sibling command as staff actor for a bot the user can manage.~~ ✅ `src/lib/booking-sibling/staff.ts` + `POST /api/booking/staff/command` + `GET /api/booking/staff/bookings`  
-2. **Schedule** page (read + mutate via existing commands) — ✅ list + cancel at `/dashboard/bots/[slug]/booking`; reschedule / no-show / create-on-behalf next.  
+2. ~~**Schedule** page (read + mutate via existing commands)~~ ✅ list + cancel / reschedule / no-show / create-on-behalf at `/dashboard/bots/[slug]/booking`.  
 3. **Settings** page (shapes, services, hours, resources/stays — port sibling admin panels) — placeholder route only.  
 4. Hide legacy `/dashboard/bookings` nav.  
 5. Remove legacy booking dashboard code when safe.  
