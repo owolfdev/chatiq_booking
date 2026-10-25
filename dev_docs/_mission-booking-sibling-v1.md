@@ -22,7 +22,8 @@ Owner: Engineering
 
 6. ~~**`resources`**~~ ✅ **v1 DONE 2026-10-26** — shapes config, eligibility, any/specific, independent calendars, `/admin/resources`, `npm run smoke:resources`. Multi-resource linking (staff+room) deferred. Spec: [`base-and-shape-modules.md`](./base-and-shape-modules.md).
 7. **`stays`** — **← START HERE** hotel nights / inventory when a real customer needs it. Same app, not a new sibling.
-8. **Optional:** ChatIQ concierge tools for `resource_id` / `resource_preference` (sibling API already accepts them).
+
+**Done alongside resources:** ChatIQ concierge tools for capabilities / `resources.list` / any-vs-specific (2026-10-26).
 
 **Live pilot context (do not rediscover):**
 - LINE OA bot: `chatiq-line-guide` / `c967a5c0-b0dc-489e-b778-835b5c294588` — `booking_mode=full`, on ChatIQ `BOOKING_SIBLING_BOT_IDS` (with pilot).
@@ -210,6 +211,23 @@ Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b.0 catalog/
 
 ## 4) Progress Log
 
+### 2026-10-26 — Concierge resource tools (ChatIQ)
+
+**What changed**
+- ChatIQ concierge: `booking_get_bot_capabilities`, `booking_list_resources`; availability/create/reschedule accept `resource_preference` / `resource_slug`; policy asks anyone vs specific when resources enabled.
+- Intent gate also matches clinician/therapist/doctor (EN/TH/ZH).
+
+**Verified:** `vitest` `booking-sibling-concierge.test.ts` 15/15.
+
+**Approx. toward DoD:** resources chat path complete; modules still ~50% until stays.
+
+```text
+chatiq: concierge resources: [####################] 100%
+chatiq-booking: Shape modules (resources→stays): [##########__________] ~50% -> DoD
+```
+
+**Next:** begin **`stays`**, or live-smoke a resources-enabled pilot bot in chat.
+
 ### 2026-10-26 — Resources shape v1
 
 **What changed**
@@ -219,7 +237,7 @@ Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b.0 catalog/
 - Admin `/admin/resources` (enable shape, CRUD, eligibility matrix).
 - Smoke: `npm run smoke:resources`.
 
-**Out of scope (later):** multi-resource linking (clinician + room together); ChatIQ concierge resource tool slots; `stays`.
+**Out of scope (later):** multi-resource linking (clinician + room together); `stays`.
 
 **Verified:** `npm run typecheck`; local `npm run smoke:resources` all checks passed.
 
