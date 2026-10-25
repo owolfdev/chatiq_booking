@@ -10,8 +10,8 @@ Owner: Engineering
 
 ### Track C — ChatIQ operator UI — **← START HERE**
 
-9. **Per-bot booking settings in ChatIQ** — shapes, services, hours, resources/stays; staff auth; server-side sibling commands (no browser token).  
-10. **Per-bot schedule in ChatIQ** — list/manage customer bookings (cancel / reschedule / no-show / create-on-behalf).  
+9. **Per-bot booking settings in ChatIQ** — shapes, services, hours, resources/stays; staff auth; server-side sibling commands (no browser token). Placeholder route live; panels next.  
+10. **Per-bot schedule in ChatIQ** — ✅ list + cancel (2026-10-26); still need reschedule / no-show / create-on-behalf. Staff API: `/api/booking/staff/*`.  
 11. **Hide legacy `/dashboard/bookings`** — old engine UI; soft landing then delete/archive.  
 12. **Demote sibling `/admin`** — ops-only after ChatIQ parity.
 
@@ -144,9 +144,9 @@ Done when **human agents can run the same operations directly and via natural la
 
 Spec: [`chatiq-booking-operator-ui.md`](./chatiq-booking-operator-ui.md). Done when **subscribers configure booking and manage the schedule inside ChatIQ**, without the sibling service token or legacy engine UI:
 
-- [ ] ChatIQ server helper: staff-scoped sibling `commands/execute` for bots the user can manage (token never in browser)
-- [ ] Per-bot **schedule** in ChatIQ (list + cancel / reschedule / no-show / create-on-behalf)
-- [ ] Per-bot **settings** in ChatIQ (shapes, services, hours, resources/stays)
+- [x] ChatIQ server helper: staff-scoped sibling `commands/execute` for bots the user can manage (token never in browser) — 2026-10-26
+- [ ] Per-bot **schedule** in ChatIQ (list + cancel ✅; reschedule / no-show / create-on-behalf still open)
+- [ ] Per-bot **settings** in ChatIQ (shapes, services, hours, resources/stays) — placeholder only
 - [ ] Legacy `/dashboard/bookings` hidden (then soft landing → delete/archive)
 - [ ] Sibling `/admin` demoted to ops-only in docs once ChatIQ parity ships
 
@@ -233,17 +233,30 @@ Phases 1–2 + 3a + 3b.0 + 3b console + shape modules (`resources` / `stays` / l
 
 ## 4) Progress Log
 
+### 2026-10-26 — Track C slice 1: staff helper + schedule list/cancel
+
+**What changed**
+- ChatIQ: `executeBookingStaffCommand` / `resolveBookingStaffBotAccess`; `POST /api/booking/staff/command`; `GET /api/booking/staff/bookings`.
+- UI: `/dashboard/bots/[slug]/booking` (list open bookings + cancel); settings placeholder; bot page **Booking** link.
+- Unit: `tests/booking-sibling-staff.test.ts`.
+
+**Verified:** unit tests for staff actor + ungated execute (no `booking_mode=full` required).
+
+**Approx. toward DoD:** Track C **~25%**.
+
+```text
+chatiq: Operator UI (Track C): [#####_______________] 25% -> DoD
+```
+
+**Next:** schedule mutations (reschedule / no-show / create-on-behalf); then settings panels (services/hours/shapes).
+
 ### 2026-10-26 — ChatIQ operator UI design locked (Track C)
 
 **What changed (docs only)**
 - New spec: [`chatiq-booking-operator-ui.md`](./chatiq-booking-operator-ui.md) — settings + schedule in ChatIQ; sibling remains engine; hide/delete legacy `/dashboard/bookings`.
 - Workspace [`ROADMAP.md`](../../ROADMAP.md) §C; mission Resume points at Track C; Decisions row locked.
 
-**Approx. toward DoD:** Track C **0%** impl.
-
-```text
-chatiq + chatiq-booking: Operator UI (Track C): [____________________] 0% -> DoD
-```
+**Approx. toward DoD:** Track C **0%** impl (superseded by slice 1 above).
 
 **Next:** implement ChatIQ server→sibling staff command helper; then schedule or settings page.
 
