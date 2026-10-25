@@ -1,20 +1,27 @@
 # Mission: Booking sibling v1 (`chatiq-booking`)
 
-Last updated: 2026-10-24  
-Status: **In progress** — **Phase 1 ✅ + Phase 2 ✅ + Phase 3a ✅ + Phase 3b.0 ✅** (2026-10-25). **Next: Phase 3b** admin console → later **resources** / **stays**. Design: [`booking-command-library.md`](./booking-command-library.md) · Identity: [`identity-and-account-linking.md`](./identity-and-account-linking.md) · Catalog: [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) · Modules: [`base-and-shape-modules.md`](./base-and-shape-modules.md).  
+Last updated: 2026-10-25  
+Status: **Base + appointments ✅** — Phases 1–3b done (2026-10-25). **Next track: shape modules** (`resources` → `stays`). Workspace split: [`ROADMAP.md`](../../ROADMAP.md) §A base vs §B modules. Design: [`booking-command-library.md`](./booking-command-library.md) · Identity: [`identity-and-account-linking.md`](./identity-and-account-linking.md) · Catalog: [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) · Modules: [`base-and-shape-modules.md`](./base-and-shape-modules.md).  
 Owner: Engineering
 
 ## Resume here (next session)
 
-**The one roadmap is this file (§2 DoD + §3 workstreams). Do this next, in order:**
+**Base track is closed.** Workspace roadmap separates **§A Base + appointments** from **§B Shape modules**. Do this next:
 
-1. ~~**Phase 1 — Tool-ready sibling**~~ ✅ **DONE 2026-10-21** (see WS-F; smoke 20/20 locally + on Vercel).
-2. ~~**Phase 2 — LLM concierge**~~ ✅ **DONE 2026-10-21** (live-smoked EN/TH/ZH, see Progress Log). Enabled by `BOOKING_CONCIERGE=llm` (set in local `chatiq/.env.local`; add to Vercel env when deploying concierge to prod chat).
-3. ~~**Phase 3a — Identity & account linking**~~ ✅ **DONE 2026-10-25** (spec: [`identity-and-account-linking.md`](./identity-and-account-linking.md)).
-4. ~~**Phase 3b.0 — Service catalog & hours**~~ ✅ **DONE 2026-10-25** ([`service-catalog-and-availability.md`](./service-catalog-and-availability.md)): schema, admin commands, Services/Hours UI. *Deferred later:* large-catalog concierge prompt rules (`search_services` command already live).
-5. **Phase 3b — Admin doors** — **✅ essentially complete** (console + copilot + customer notify). **Next (Later):** large-catalog concierge prompts; **resources** / **stays** shapes.
-6. Later shapes — **`resources`** (clinic any/specific clinician), then **`stays`** (hotel nights) — modules doc. Not separate apps.
-7. Parallel/later — large-catalog concierge prompts; widen `BOOKING_SIBLING_BOT_IDS`; WS-D legacy code archive; payments; `BOOKING_CONCIERGE=llm` on ChatIQ Vercel if needed.
+### Track A — Base + appointments (complete)
+
+1. ~~**Phase 1 — Tool-ready sibling**~~ ✅ **DONE 2026-10-21**
+2. ~~**Phase 2 — LLM concierge**~~ ✅ **DONE 2026-10-21** (`BOOKING_CONCIERGE=llm` local; add to ChatIQ Vercel when prod should match)
+3. ~~**Phase 3a — Identity & account linking**~~ ✅ **DONE 2026-10-25**
+4. ~~**Phase 3b.0 — Service catalog & hours**~~ ✅ **DONE 2026-10-25**
+5. ~~**Phase 3b — Admin doors**~~ ✅ **DONE 2026-10-25** (Schedule → Copilot + customer notify)
+
+**Optional A polish (does not block B):** large-catalog concierge prompts; widen allowlist; Vercel concierge flag; WS-D archive; payments.
+
+### Track B — Shape modules (default next)
+
+6. **`resources`** — **← START HERE** clinic any/specific clinician (includes per-bot `shapes` config). Spec: [`base-and-shape-modules.md`](./base-and-shape-modules.md).
+7. **`stays`** — hotel nights / inventory when a real customer needs it. Same app, not a new sibling.
 
 **Live pilot context (do not rediscover):**
 - LINE OA bot: `chatiq-line-guide` / `c967a5c0-b0dc-489e-b778-835b5c294588` — `booking_mode=full`, on ChatIQ `BOOKING_SIBLING_BOT_IDS` (with pilot).
@@ -201,6 +208,21 @@ Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b.0 catalog/
 - [x] Customer notification on admin changes via ChatIQ (2026-10-25)
 
 ## 4) Progress Log
+
+### 2026-10-25 — Roadmap: base vs shape modules split
+
+**What changed (docs only)**
+- Workspace [`ROADMAP.md`](../../ROADMAP.md) and this Resume: **Track A** (base + appointments) marked complete; **Track B** (resources → stays) is default next.
+- Shape-module work is explicitly separate from base polish (large-catalog prompts, Vercel flags, etc.).
+
+**Approx. toward DoD:** Base/appointments v1 **done**; modules track **not started**.
+
+```text
+chatiq-booking: Base + appointments: [####################] 100%
+chatiq-booking: Shape modules (resources→stays): [____________________] 0%
+```
+
+**Next session:** begin **`resources`** (clinic), or optional Track A polish if a real catalog needs search prompts first.
 
 ### 2026-10-25 — Phase 3b console slice 7 (staff-change customer notify)
 
