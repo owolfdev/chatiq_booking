@@ -1,12 +1,19 @@
 # Mission: Booking sibling v1 (`chatiq-booking`)
 
 Last updated: 2026-10-26  
-Status: **Base + appointments ✅** · **`resources` v1 ✅** · **`stays` v1 ✅** (2026-10-26). Shape-module track for the three planned shapes is complete. Workspace: [`ROADMAP.md`](../../ROADMAP.md) §A vs §B. Design: [`booking-command-library.md`](./booking-command-library.md) · Identity: [`identity-and-account-linking.md`](./identity-and-account-linking.md) · Catalog: [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) · Modules: [`base-and-shape-modules.md`](./base-and-shape-modules.md).  
+Status: **Engine ✅** (base + appointments + resources + stays + person+room linking). **Next: ChatIQ operator UI** (settings + schedule in ChatIQ; hide legacy `/dashboard/bookings`). Workspace: [`ROADMAP.md`](../../ROADMAP.md) §C. Spec: [`chatiq-booking-operator-ui.md`](./chatiq-booking-operator-ui.md). Design: [`booking-command-library.md`](./booking-command-library.md) · Identity: [`identity-and-account-linking.md`](./identity-and-account-linking.md) · Catalog: [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) · Modules: [`base-and-shape-modules.md`](./base-and-shape-modules.md).  
 Owner: Engineering
 
 ## Resume here (next session)
 
-**Shape modules A–C done.** Optional next:
+**Engine track done.** **Default next = Track C** (ChatIQ product UI). Spec: [`chatiq-booking-operator-ui.md`](./chatiq-booking-operator-ui.md).
+
+### Track C — ChatIQ operator UI — **← START HERE**
+
+9. **Per-bot booking settings in ChatIQ** — shapes, services, hours, resources/stays; staff auth; server-side sibling commands (no browser token).  
+10. **Per-bot schedule in ChatIQ** — list/manage customer bookings (cancel / reschedule / no-show / create-on-behalf).  
+11. **Hide legacy `/dashboard/bookings`** — old engine UI; soft landing then delete/archive.  
+12. **Demote sibling `/admin`** — ops-only after ChatIQ parity.
 
 ### Track A — Base + appointments (complete)
 
@@ -20,14 +27,14 @@ Owner: Engineering
 
 ### Track B — Shape modules
 
-6. ~~**`resources`**~~ ✅ **v1 DONE 2026-10-26** — shapes, eligibility, any/specific, `/admin/resources`, concierge tools. Multi-resource linking (staff+room) deferred.
+6. ~~**`resources`**~~ ✅ **v1 DONE 2026-10-26** — shapes, eligibility, any/specific, `/admin/resources`, concierge tools.
 7. ~~**`stays`**~~ ✅ **v1 DONE 2026-10-26** — `ends_at`, room-type capacity, check-in/out availability, `/admin/stays`, `npm run smoke:stays`, concierge stay slots.
 
-**Optional later:** live hotel/clinic chat smoke; payments.
-
-### Track B+ — Multi-resource linking
+### Track B+ — Multi-resource linking (complete)
 
 8. ~~**Person + room linking**~~ ✅ **DONE 2026-10-26** — `require_resource_kinds`, `booking_resources`, both must be free; `/admin/resources` toggle; `npm run smoke:resource-linking`.
+
+**Optional (does not block Track C):** live hotel/clinic chat smoke; payments; large-catalog prompts.
 
 **Live pilot context (do not rediscover):**
 - LINE OA bot: `chatiq-line-guide` / `c967a5c0-b0dc-489e-b778-835b5c294588` — `booking_mode=full`, on ChatIQ `BOOKING_SIBLING_BOT_IDS` (with pilot).
@@ -59,9 +66,10 @@ Owner: Engineering
 | **Rollout** | `BOOKING_SIBLING_BOT_IDS` allowlist for pilot; widen/clear at release |
 | **Entry UX** | **Intent → typed command library** (not keyword canned as primary). Spec: [`booking-command-library.md`](./booking-command-library.md) |
 | **Interpretation (locked 2026-10-21)** | **LLM interprets (any language) and drives the sibling via one fixed typed command set; sibling is deterministic/monolingual internally and never parses natural language; customer never touches the sibling directly.** Heuristic regexes = fallback/shortcuts only, never extended per-language. Full design: [`booking-command-library.md`](./booking-command-library.md) |
-| **Admin (locked 2026-10-21)** | Same command bus, three interfaces: customer concierge (LLM), admin console (direct UI), admin copilot (LLM + human confirm-cards). Actor scope + audit on every command. |
+| **Admin (locked 2026-10-21; surface updated 2026-10-26)** | Same command bus, three interfaces: customer concierge (LLM), **operator UI in ChatIQ** (direct UI; sibling `/admin` = temporary/ops), admin copilot (LLM + human confirm-cards). Actor scope + audit on every command. Product surface: [`chatiq-booking-operator-ui.md`](./chatiq-booking-operator-ui.md). |
 | **Catalog (locked 2026-10-24)** | Owner-configured, business-agnostic services + hours; shared calendar per bot in v1; 1–100 services via list/search. Spec: [`service-catalog-and-availability.md`](./service-catalog-and-availability.md). |
 | **Modules (locked 2026-10-24)** | One sibling = **base** + optional **shape modules** (`appointments` default, then `resources`, then `stays`). Not one app per industry. Spec: [`base-and-shape-modules.md`](./base-and-shape-modules.md). |
+| **Operator UI (locked 2026-10-26)** | **Settings + schedule live in ChatIQ** (team auth, per bot). Sibling = engine only. Legacy `/dashboard/bookings` hidden then deleted. Spec: [`chatiq-booking-operator-ui.md`](./chatiq-booking-operator-ui.md). |
 
 ## 1) Why
 
@@ -132,9 +140,19 @@ Done when **human agents can run the same operations directly and via natural la
 - [x] Admin copilot: NL → proposed command card → Confirm/Edit/Dismiss; read-only via confirm (2026-10-25 slice 6)
 - [x] Admin changes notify the customer via ChatIQ (LINE + web; EN/TH/zh) (2026-10-25 slice 7)
 
+### Track C — ChatIQ operator UI (product surface)
+
+Spec: [`chatiq-booking-operator-ui.md`](./chatiq-booking-operator-ui.md). Done when **subscribers configure booking and manage the schedule inside ChatIQ**, without the sibling service token or legacy engine UI:
+
+- [ ] ChatIQ server helper: staff-scoped sibling `commands/execute` for bots the user can manage (token never in browser)
+- [ ] Per-bot **schedule** in ChatIQ (list + cancel / reschedule / no-show / create-on-behalf)
+- [ ] Per-bot **settings** in ChatIQ (shapes, services, hours, resources/stays)
+- [ ] Legacy `/dashboard/bookings` hidden (then soft landing → delete/archive)
+- [ ] Sibling `/admin` demoted to ops-only in docs once ChatIQ parity ships
+
 ### Overall v1 DoD
 
-Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b.0 catalog/hours + Phase 3b console (copilot may trail). Legacy in-`chatiq` booking docs archived (done 2026-10-21); legacy code tagged `pre-booking-sibling-archive` and off hot paths (WS-D).
+Phases 1–2 + 3a + 3b.0 + 3b console + shape modules (`resources` / `stays` / linking) ✅ on the engine. **Remaining for GTM product surface:** Track C (ChatIQ operator UI). Legacy in-`chatiq` booking docs archived (2026-10-21); legacy dashboard code still present until Track C hides/deletes it.
 
 ## 3) Workstreams
 
@@ -214,6 +232,20 @@ Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b.0 catalog/
 - [x] Customer notification on admin changes via ChatIQ (2026-10-25)
 
 ## 4) Progress Log
+
+### 2026-10-26 — ChatIQ operator UI design locked (Track C)
+
+**What changed (docs only)**
+- New spec: [`chatiq-booking-operator-ui.md`](./chatiq-booking-operator-ui.md) — settings + schedule in ChatIQ; sibling remains engine; hide/delete legacy `/dashboard/bookings`.
+- Workspace [`ROADMAP.md`](../../ROADMAP.md) §C; mission Resume points at Track C; Decisions row locked.
+
+**Approx. toward DoD:** Track C **0%** impl.
+
+```text
+chatiq + chatiq-booking: Operator UI (Track C): [____________________] 0% -> DoD
+```
+
+**Next:** implement ChatIQ server→sibling staff command helper; then schedule or settings page.
 
 ### 2026-10-26 — Multi-resource linking (person + room)
 

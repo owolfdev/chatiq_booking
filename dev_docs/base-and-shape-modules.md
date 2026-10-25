@@ -67,7 +67,7 @@ Each module may register:
 | Commands | admin + customer (namespaced or `booking.*` with module gate) |
 | Availability strategy | How `get_availability` computes open intervals |
 | Concierge tools + prompt rules | Which tools ChatIQ exposes; narrowing hints |
-| Admin UI sections | Pages/panels under `/admin` |
+| Admin UI sections | Panels under sibling `/admin` (ops/pilot) **and** ChatIQ operator UI when Track C ships — same commands. Spec: [`chatiq-booking-operator-ui.md`](./chatiq-booking-operator-ui.md) |
 
 **Default enabled module:** `appointments` (what Phase 3b.0 implements).
 
