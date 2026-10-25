@@ -10,7 +10,7 @@ Owner: Engineering
 
 ### Track C — ChatIQ operator UI — **← START HERE**
 
-9. **Per-bot booking settings in ChatIQ** — shapes, services, hours, resources/stays; staff auth; server-side sibling commands (no browser token). Placeholder route live; panels next.  
+9. ~~**Per-bot booking settings in ChatIQ**~~ ✅ **v1 DONE 2026-10-26** — shapes, services, hours, resources CRUD. Eligibility / person+room linking / exceptions+blocks still sibling `/admin` for now.  
 10. ~~**Per-bot schedule in ChatIQ**~~ ✅ **DONE 2026-10-26** — list + cancel / reschedule / no-show / create-on-behalf. Staff API: `/api/booking/staff/*`.  
 11. **Hide legacy `/dashboard/bookings`** — old engine UI; soft landing then delete/archive.  
 12. **Demote sibling `/admin`** — ops-only after ChatIQ parity.
@@ -146,7 +146,7 @@ Spec: [`chatiq-booking-operator-ui.md`](./chatiq-booking-operator-ui.md). Done w
 
 - [x] ChatIQ server helper: staff-scoped sibling `commands/execute` for bots the user can manage (token never in browser) — 2026-10-26
 - [x] Per-bot **schedule** in ChatIQ (list + cancel / reschedule / no-show / create-on-behalf) — 2026-10-26
-- [ ] Per-bot **settings** in ChatIQ (shapes, services, hours, resources/stays) — placeholder only
+- [x] Per-bot **settings** in ChatIQ (shapes, services, hours, resources CRUD) — 2026-10-26; eligibility/exceptions still sibling admin
 - [ ] Legacy `/dashboard/bookings` hidden (then soft landing → delete/archive)
 - [ ] Sibling `/admin` demoted to ops-only in docs once ChatIQ parity ships
 
@@ -233,6 +233,22 @@ Phases 1–2 + 3a + 3b.0 + 3b console + shape modules (`resources` / `stays` / l
 
 ## 4) Progress Log
 
+### 2026-10-26 — Track C slice 3: ChatIQ booking settings panels
+
+**What changed**
+- `/dashboard/bots/[slug]/booking/settings`: Shapes (timezone + resources/stays), Services CRUD, weekly Hours, Resources CRUD.
+- Shared `staff-client.ts` for schedule + settings.
+
+**Verified:** lint clean on settings client.
+
+**Approx. toward DoD:** Track C **~70%**.
+
+```text
+chatiq: Operator UI (Track C): [##############______] 70% -> DoD
+```
+
+**Next:** hide legacy `/dashboard/bookings` nav; optional eligibility / exceptions polish; demote sibling `/admin`.
+
 ### 2026-10-26 — Track C slice 2: schedule reschedule / no-show / create-on-behalf
 
 **What changed**
@@ -240,11 +256,7 @@ Phases 1–2 + 3a + 3b.0 + 3b console + shape modules (`resources` / `stays` / l
 
 **Verified:** typecheck/lint clean on edited client; commands reuse `/api/booking/staff/command`.
 
-**Approx. toward DoD:** Track C **~45%**.
-
-```text
-chatiq: Operator UI (Track C): [#########___________] 45% -> DoD
-```
+**Approx. toward DoD:** Track C **~45%** (superseded by slice 3).
 
 **Next:** settings panels (services / hours / shapes / resources); then hide legacy `/dashboard/bookings`.
 

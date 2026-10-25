@@ -1,7 +1,7 @@
 # ChatIQ booking operator UI (product surface)
 
 Last updated: 2026-10-26  
-Status: **Design locked.** Implementation started (staff helper + schedule list/cancel).  
+Status: **Design locked.** Schedule ✅ · Settings v1 ✅ (shapes/services/hours/resources). Legacy hide next.  
 Mission: [`_mission-booking-sibling-v1.md`](./_mission-booking-sibling-v1.md) · Workspace: [`ROADMAP.md`](../../ROADMAP.md) §C
 
 ## 1) Verdict
@@ -57,7 +57,7 @@ Do **not** wire legacy UI to the sibling as a shortcut — replace it.
 
 1. ~~ChatIQ server helper: execute sibling command as staff actor for a bot the user can manage.~~ ✅ `src/lib/booking-sibling/staff.ts` + `POST /api/booking/staff/command` + `GET /api/booking/staff/bookings`  
 2. ~~**Schedule** page (read + mutate via existing commands)~~ ✅ list + cancel / reschedule / no-show / create-on-behalf at `/dashboard/bots/[slug]/booking`.  
-3. **Settings** page (shapes, services, hours, resources/stays — port sibling admin panels) — placeholder route only.  
+3. ~~**Settings** page~~ ✅ v1 — shapes, services, hours, resources CRUD at `/dashboard/bots/[slug]/booking/settings` (eligibility / exceptions still sibling `/admin`).  
 4. Hide legacy `/dashboard/bookings` nav.  
 5. Remove legacy booking dashboard code when safe.  
 6. Demote sibling `/admin` to ops-only in docs.
