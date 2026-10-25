@@ -18,10 +18,32 @@ export type CatalogService = {
   currency: string | null;
   booking_horizon_days: number | null;
   min_notice_minutes: number | null;
+  /** When non-empty (e.g. ["person","room"]), booking must assign one eligible resource per kind. */
+  require_resource_kinds: string[];
 };
 
 const CATALOG_SELECT =
-  "id, team_id, bot_id, slug, title, duration_minutes, active, description, category, sort_order, buffer_before_minutes, buffer_after_minutes, capacity, price_cents, currency, booking_horizon_days, min_notice_minutes";
+  "id, team_id, bot_id, slug, title, duration_minutes, active, description, category, sort_order, buffer_before_minutes, buffer_after_minutes, capacity, price_cents, currency, booking_horizon_days, min_notice_minutes, require_resource_kinds";
+
+export function normalizeRequireResourceKinds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const allowed = new Set(["person", "room", "other"]);
+  const out: string[] = [];
+  for (const v of raw) {
+    const k = String(v);
+    if (allowed.has(k) && !out.includes(k)) out.push(k);
+  }
+  return out;
+}
+
+function mapCatalogRow(row: Record<string, unknown>): CatalogService {
+  return {
+    ...(row as unknown as CatalogService),
+    require_resource_kinds: normalizeRequireResourceKinds(
+      row.require_resource_kinds
+    ),
+  };
+}
 
 function slugify(raw: string): string {
   return raw
@@ -51,7 +73,7 @@ export async function listCatalogServices(input: {
   }
   const { data, error } = await query;
   if (error) throw new Error(`catalog list failed: ${error.message}`);
-  return (data ?? []) as CatalogService[];
+  return (data ?? []).map((r) => mapCatalogRow(r as Record<string, unknown>));
 }
 
 export async function searchCatalogServices(input: {
@@ -93,7 +115,7 @@ export async function getCatalogService(input: {
     .eq("bot_id", input.bot_id)
     .eq("id", key)
     .maybeSingle();
-  if (byId) return byId as CatalogService;
+  if (byId) return mapCatalogRow(byId as Record<string, unknown>);
   const { data: bySlug, error } = await supabase
     .from("catalog_items")
     .select(CATALOG_SELECT)
@@ -102,7 +124,9 @@ export async function getCatalogService(input: {
     .eq("slug", key.toLowerCase())
     .maybeSingle();
   if (error) throw new Error(`catalog get failed: ${error.message}`);
-  return (bySlug as CatalogService | null) ?? null;
+  return bySlug
+    ? mapCatalogRow(bySlug as Record<string, unknown>)
+    : null;
 }
 
 export type UpsertServiceInput = {
@@ -123,6 +147,7 @@ export type UpsertServiceInput = {
   booking_horizon_days?: number | null;
   min_notice_minutes?: number | null;
   active?: boolean;
+  require_resource_kinds?: string[] | null;
 };
 
 export async function upsertCatalogService(
@@ -171,6 +196,13 @@ export async function upsertCatalogService(
         : null,
     active: input.active !== false,
     updated_at: new Date().toISOString(),
+    ...(input.require_resource_kinds !== undefined
+      ? {
+          require_resource_kinds: normalizeRequireResourceKinds(
+            input.require_resource_kinds
+          ),
+        }
+      : {}),
   };
 
   if (input.id?.trim()) {
@@ -183,7 +215,7 @@ export async function upsertCatalogService(
       .select(CATALOG_SELECT)
       .single();
     if (error) throw new Error(`catalog update failed: ${error.message}`);
-    return data as CatalogService;
+    return mapCatalogRow(data as Record<string, unknown>);
   }
 
   const { data, error } = await supabase
@@ -192,7 +224,7 @@ export async function upsertCatalogService(
     .select(CATALOG_SELECT)
     .single();
   if (error) throw new Error(`catalog upsert failed: ${error.message}`);
-  return data as CatalogService;
+  return mapCatalogRow(data as Record<string, unknown>);
 }
 
 export async function setCatalogServiceActive(input: {
@@ -212,7 +244,33 @@ export async function setCatalogServiceActive(input: {
     .select(CATALOG_SELECT)
     .single();
   if (error) throw new Error(`catalog set_active failed: ${error.message}`);
-  return data as CatalogService;
+  return mapCatalogRow(data as Record<string, unknown>);
+}
+
+export async function setServiceRequireResourceKinds(input: {
+  team_id: string;
+  bot_id: string;
+  catalog_item_id: string;
+  require_resource_kinds: string[];
+}): Promise<CatalogService> {
+  const supabase = createBookingAdminClient();
+  if (!supabase) throw new Error("Supabase not configured");
+  const kinds = normalizeRequireResourceKinds(input.require_resource_kinds);
+  const { data, error } = await supabase
+    .from("catalog_items")
+    .update({
+      require_resource_kinds: kinds,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", input.catalog_item_id)
+    .eq("team_id", input.team_id)
+    .eq("bot_id", input.bot_id)
+    .select(CATALOG_SELECT)
+    .single();
+  if (error) {
+    throw new Error(`catalog require_resource_kinds failed: ${error.message}`);
+  }
+  return mapCatalogRow(data as Record<string, unknown>);
 }
 
 export async function reorderCatalogServices(input: {

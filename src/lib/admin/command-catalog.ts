@@ -72,6 +72,7 @@ export const COMMAND_CATALOG: CommandEntry[] = [
       "limit?",
       "resource_id|resource_slug?",
       "resource_preference?",
+      "room_id|room_slug?",
       "check_in?",
       "check_out?",
       "nights?",
@@ -302,6 +303,17 @@ export const COMMAND_CATALOG: CommandEntry[] = [
     slots: ["service_id|service_slug*", "resource_ids*"],
     adminHref: "/admin/resources",
     keywords: ["matrix", "eligibility", "who"],
+  },
+  {
+    id: "resources.set_service_requirements",
+    category: "resources",
+    actor: "staff",
+    mutating: true,
+    summary:
+      "Require one resource per kind on booking (e.g. person+room). Empty = single resource.",
+    slots: ["service_id|service_slug*", "require_resource_kinds*"],
+    adminHref: "/admin/resources",
+    keywords: ["link", "room", "together", "multi"],
   },
   {
     id: "availability.set_hours",

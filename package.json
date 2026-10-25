@@ -13,7 +13,8 @@
     "smoke:identity": "node scripts/smoke-identity.mjs",
     "smoke:catalog": "node scripts/smoke-catalog.mjs",
     "smoke:resources": "node scripts/smoke-resources.mjs",
-    "smoke:stays": "node scripts/smoke-stays.mjs"
+    "smoke:stays": "node scripts/smoke-stays.mjs",
+    "smoke:resource-linking": "node scripts/smoke-resource-linking.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",

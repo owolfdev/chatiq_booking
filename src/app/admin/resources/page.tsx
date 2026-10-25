@@ -19,6 +19,7 @@ type ServiceRow = {
   id: string;
   slug: string;
   title: string;
+  require_resource_kinds?: string[];
   resources?: Array<{ id: string; slug: string; title: string }>;
 };
 
@@ -51,6 +52,7 @@ function ResourcesPanel({
   const [form, setForm] = useState<FormState>(emptyForm);
   const [eligibilityServiceId, setEligibilityServiceId] = useState("");
   const [eligibilityIds, setEligibilityIds] = useState<string[]>([]);
+  const [linkPersonRoom, setLinkPersonRoom] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -168,6 +170,10 @@ function ResourcesPanel({
     setEligibilityServiceId(serviceId);
     const svc = services.find((s) => s.id === serviceId);
     setEligibilityIds((svc?.resources ?? []).map((r) => r.id));
+    const kinds = svc?.require_resource_kinds ?? [];
+    setLinkPersonRoom(
+      kinds.includes("person") && kinds.includes("room")
+    );
   }
 
   async function saveEligibility() {
@@ -185,9 +191,24 @@ function ResourcesPanel({
         resource_ids: eligibilityIds,
       },
     });
-    setBusy(false);
     if (!result.ok) {
+      setBusy(false);
       setError(result.error);
+      return;
+    }
+    const req = await executeAdminCommand({
+      session,
+      command: "resources.set_service_requirements",
+      slots: {
+        service_id: eligibilityServiceId,
+        require_resource_kinds: linkPersonRoom
+          ? ["person", "room"]
+          : [],
+      },
+    });
+    setBusy(false);
+    if (!req.ok) {
+      setError(req.error);
       return;
     }
     await load();
@@ -216,8 +237,8 @@ function ResourcesPanel({
         </h2>
         <p style={{ ...adminUi.muted, marginBottom: "0.75rem", fontSize: "0.9rem" }}>
           Enable <code>resources</code> so customers can book a specific
-          clinician/room (or anyone eligible). Multi-resource linking (staff +
-          room together) is later.
+          clinician/room (or anyone eligible). Per service, you can require
+          person + room together (both must be free).
         </p>
         <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
           <input
@@ -383,8 +404,8 @@ function ResourcesPanel({
           Service eligibility
         </h2>
         <p style={{ ...adminUi.muted, marginBottom: "0.75rem", fontSize: "0.9rem" }}>
-          Which resources may deliver each service. Required before customers
-          can book when the resources shape is on.
+          Which resources may deliver each service. Optional: require a person
+          and a room on every booking (both calendars must be free).
         </p>
         <div style={adminUi.field}>
           <label style={adminUi.label}>Service</label>
@@ -434,6 +455,21 @@ function ResourcesPanel({
                   </label>
                 ))}
             </div>
+            <label
+              style={{
+                display: "flex",
+                gap: "0.5rem",
+                alignItems: "center",
+                margin: "0.75rem 0",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={linkPersonRoom}
+                onChange={(e) => setLinkPersonRoom(e.target.checked)}
+              />
+              Require person + room together
+            </label>
             <button
               type="button"
               style={adminUi.button}

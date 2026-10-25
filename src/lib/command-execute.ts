@@ -22,6 +22,7 @@ import {
 } from "@/lib/contract";
 import { botHasShape, normalizeShapes } from "@/lib/shapes";
 import {
+  assignLinkedResourcesAt,
   isResourceFreeAt,
   searchAvailabilityForResources,
 } from "@/lib/shapes/resources-availability";
@@ -36,6 +37,7 @@ import {
   reorderCatalogServices,
   searchCatalogServices,
   setCatalogServiceActive,
+  setServiceRequireResourceKinds,
   upsertCatalogService,
 } from "@/lib/supabase/catalog";
 import {
@@ -198,64 +200,90 @@ function isStayAvailabilityRequest(
   return !botHasShape(shapes, "appointments");
 }
 
+async function resolvePinnedResources(input: {
+  team_id: string;
+  bot_id: string;
+  slots: Slots;
+  eligible: DbResource[];
+}): Promise<
+  | {
+      pinned: DbResource[];
+      preference: "any" | "specific";
+      /** Legacy single primary (person preferred). */
+      resource: DbResource | null;
+    }
+  | { error: BookingCommandExecuteResponse }
+> {
+  const keys = [
+    str(input.slots, "resource_id", "resource_slug", "resource", "provider_id", "clinician"),
+    str(input.slots, "room_id", "room_slug", "room"),
+  ].filter((k): k is string => Boolean(k));
+
+  const prefRaw = str(input.slots, "resource_preference", "preference");
+  const preference: "any" | "specific" =
+    keys.length > 0 || prefRaw === "specific" ? "specific" : "any";
+
+  const pinned: DbResource[] = [];
+  for (const wanted of keys) {
+    const lower = wanted.toLowerCase();
+    const fromEligible = input.eligible.find(
+      (r) =>
+        r.id === wanted ||
+        r.slug.toLowerCase() === lower ||
+        r.title.toLowerCase() === lower
+    );
+    let found = fromEligible;
+    if (!found) {
+      const loaded = await getResource({
+        team_id: input.team_id,
+        bot_id: input.bot_id,
+        id_or_slug: wanted,
+      });
+      if (!loaded || !loaded.active) {
+        return {
+          error: fail(
+            undefined,
+            "RESOURCE_NOT_FOUND",
+            `Unknown resource: ${wanted}`
+          ),
+        };
+      }
+      if (!input.eligible.some((r) => r.id === loaded.id)) {
+        return {
+          error: fail(
+            undefined,
+            "RESOURCE_NOT_ELIGIBLE",
+            `${loaded.title} cannot deliver this service`
+          ),
+        };
+      }
+      found = loaded;
+    }
+    if (!pinned.some((p) => p.id === found!.id)) pinned.push(found);
+  }
+
+  const resource =
+    pinned.find((r) => r.kind === "person") ?? pinned[0] ?? null;
+  return { pinned, preference, resource };
+}
+
+/** @deprecated name kept for call sites — wraps resolvePinnedResources. */
 async function resolveResourceFromSlots(input: {
   team_id: string;
   bot_id: string;
   slots: Slots;
   eligible: DbResource[];
 }): Promise<
-  | { resource: DbResource | null; preference: "any" | "specific" }
+  | { resource: DbResource | null; preference: "any" | "specific"; pinned: DbResource[] }
   | { error: BookingCommandExecuteResponse }
 > {
-  const wanted = str(
-    input.slots,
-    "resource_id",
-    "resource_slug",
-    "resource",
-    "provider_id",
-    "clinician"
-  );
-  const prefRaw = str(input.slots, "resource_preference", "preference");
-  const preference: "any" | "specific" =
-    wanted || prefRaw === "specific" ? "specific" : "any";
-
-  if (!wanted) {
-    return { resource: null, preference };
-  }
-
-  const lower = wanted.toLowerCase();
-  const fromEligible = input.eligible.find(
-    (r) =>
-      r.id === wanted ||
-      r.slug.toLowerCase() === lower ||
-      r.title.toLowerCase() === lower
-  );
-  if (fromEligible) return { resource: fromEligible, preference: "specific" };
-
-  const found = await getResource({
-    team_id: input.team_id,
-    bot_id: input.bot_id,
-    id_or_slug: wanted,
-  });
-  if (!found || !found.active) {
-    return {
-      error: fail(
-        undefined,
-        "RESOURCE_NOT_FOUND",
-        `Unknown resource: ${wanted}`
-      ),
-    };
-  }
-  if (!input.eligible.some((r) => r.id === found.id)) {
-    return {
-      error: fail(
-        undefined,
-        "RESOURCE_NOT_ELIGIBLE",
-        `${found.title} cannot deliver this service`
-      ),
-    };
-  }
-  return { resource: found, preference: "specific" };
+  const resolved = await resolvePinnedResources(input);
+  if ("error" in resolved) return resolved;
+  return {
+    resource: resolved.resource,
+    preference: resolved.preference,
+    pinned: resolved.pinned,
+  };
 }
 
 export async function executeBookingCommand(
@@ -394,6 +422,7 @@ export async function executeBookingCommand(
           capacity: i.capacity ?? 1,
           price_cents: i.price_cents ?? null,
           currency: i.currency ?? null,
+          require_resource_kinds: i.require_resource_kinds ?? [],
           ...(resourceMap
             ? { resources: resourceMap.get(i.id) ?? [] }
             : {}),
@@ -569,9 +598,12 @@ export async function executeBookingCommand(
           eligible,
         });
         if ("error" in resolved) return { ...resolved.error, command };
-        const pool = resolved.resource
-          ? [resolved.resource]
-          : eligible;
+        const requireKinds = svc.item.require_resource_kinds ?? [];
+        const linked = requireKinds.length >= 2;
+        // Single-resource mode: pin narrows the pool. Linked mode: search all
+        // eligible and honor pins inside the linker.
+        const pool =
+          !linked && resolved.resource ? [resolved.resource] : eligible;
         const occupiedByResource = new Map<
           string,
           Awaited<ReturnType<typeof listOccupiedIntervals>>
@@ -590,6 +622,8 @@ export async function executeBookingCommand(
           ...commonAvail,
           resources: pool,
           occupiedByResource,
+          requireKinds: linked ? requireKinds : undefined,
+          pinnedResourceIds: resolved.pinned.map((p) => p.id),
         });
         return ok(command, {
           service: {
@@ -597,6 +631,7 @@ export async function executeBookingCommand(
             slug: svc.item.slug,
             title: svc.item.title,
             duration_minutes: svc.item.duration_minutes,
+            require_resource_kinds: requireKinds,
           },
           resource_preference: resolved.preference,
           resources: pool.map(resourcePayload),
@@ -604,6 +639,7 @@ export async function executeBookingCommand(
             starts_at: s.starts_at,
             label: s.label,
             timezone: tz,
+            resources: s.resources,
             resource_id: s.resource_id,
             resource_slug: s.resource_slug,
             resource_title: s.resource_title,
@@ -889,6 +925,51 @@ export async function executeBookingCommand(
             command,
             "INVALID_REQUEST",
             err instanceof Error ? err.message : "set_service_eligibility failed"
+          );
+        }
+      }
+
+      if (command === "resources.set_service_requirements") {
+        const svc = resolveService(items, slots);
+        if ("error" in svc) return { ...svc.error, command };
+        const kindsRaw =
+          slots.require_resource_kinds ?? slots.require_kinds ?? slots.kinds;
+        if (!Array.isArray(kindsRaw)) {
+          return fail(
+            command,
+            "INVALID_REQUEST",
+            "require_resource_kinds array is required (e.g. [\"person\",\"room\"] or [])"
+          );
+        }
+        try {
+          const service = await setServiceRequireResourceKinds({
+            team_id,
+            bot_id,
+            catalog_item_id: svc.item.id,
+            require_resource_kinds: kindsRaw.map(String),
+          });
+          await audit({
+            command,
+            after: {
+              service_id: service.id,
+              require_resource_kinds: service.require_resource_kinds,
+            },
+          });
+          return ok(command, {
+            service: {
+              id: service.id,
+              slug: service.slug,
+              title: service.title,
+              require_resource_kinds: service.require_resource_kinds,
+            },
+          });
+        } catch (err) {
+          return fail(
+            command,
+            "INVALID_REQUEST",
+            err instanceof Error
+              ? err.message
+              : "set_service_requirements failed"
           );
         }
       }
@@ -1462,6 +1543,7 @@ export async function executeBookingCommand(
       }
 
       let resourceId: string | null = null;
+      let resourceKinds: Array<{ id: string; kind: string }> | null = null;
       if (!stayCreate && botHasShape(createSettings.shapes, "resources")) {
         const eligible = await listEligibleResources({
           team_id,
@@ -1483,36 +1565,77 @@ export async function executeBookingCommand(
           eligible,
         });
         if ("error" in resolved) return { ...resolved.error, command };
-        const pool = resolved.resource ? [resolved.resource] : eligible;
-        let picked: DbResource | null = resolved.resource;
-        if (!picked) {
-          for (const r of pool) {
-            const occupied = await listOccupiedIntervals({
+        const requireKinds = svc.item.require_resource_kinds ?? [];
+        const occupiedByResource = new Map<
+          string,
+          Awaited<ReturnType<typeof listOccupiedIntervals>>
+        >();
+        for (const r of eligible) {
+          occupiedByResource.set(
+            r.id,
+            await listOccupiedIntervals({
               team_id,
               bot_id,
               resource_id: r.id,
-            });
-            if (
-              isResourceFreeAt({
-                starts_at: startsAt,
-                durationMinutes: svc.item.duration_minutes,
-                bufferBeforeMinutes: svc.item.buffer_before_minutes ?? 0,
-                bufferAfterMinutes: svc.item.buffer_after_minutes ?? 0,
-                occupied,
-              })
-            ) {
-              picked = r;
-              break;
-            }
+            })
+          );
+        }
+
+        if (requireKinds.length >= 2) {
+          const assigned = assignLinkedResourcesAt({
+            starts_at: startsAt,
+            durationMinutes: svc.item.duration_minutes,
+            bufferBeforeMinutes: svc.item.buffer_before_minutes ?? 0,
+            bufferAfterMinutes: svc.item.buffer_after_minutes ?? 0,
+            eligible,
+            requireKinds,
+            occupiedByResource,
+            pinnedResourceIds: resolved.pinned.map((p) => p.id),
+          });
+          if (!assigned) {
+            return fail(command, "SLOT_TAKEN", "That time was just taken");
           }
+          resourceKinds = assigned.map((r) => ({ id: r.id, kind: r.kind }));
+          resourceId =
+            assigned.find((r) => r.kind === "person")?.id ?? assigned[0]!.id;
+        } else {
+          const pool = resolved.resource ? [resolved.resource] : eligible;
+          let picked: DbResource | null = resolved.resource;
+          if (!picked) {
+            for (const r of pool) {
+              if (
+                isResourceFreeAt({
+                  starts_at: startsAt,
+                  durationMinutes: svc.item.duration_minutes,
+                  bufferBeforeMinutes: svc.item.buffer_before_minutes ?? 0,
+                  bufferAfterMinutes: svc.item.buffer_after_minutes ?? 0,
+                  occupied: occupiedByResource.get(r.id) ?? [],
+                })
+              ) {
+                picked = r;
+                break;
+              }
+            }
+          } else if (
+            !isResourceFreeAt({
+              starts_at: startsAt,
+              durationMinutes: svc.item.duration_minutes,
+              bufferBeforeMinutes: svc.item.buffer_before_minutes ?? 0,
+              bufferAfterMinutes: svc.item.buffer_after_minutes ?? 0,
+              occupied: occupiedByResource.get(picked.id) ?? [],
+            })
+          ) {
+            return fail(command, "SLOT_TAKEN", "That time was just taken");
+          }
+          if (!picked) {
+            return fail(command, "SLOT_TAKEN", "That time was just taken");
+          }
+          resourceId = picked.id;
+          resourceKinds = [{ id: picked.id, kind: picked.kind }];
         }
-        if (!picked) {
-          return fail(command, "SLOT_TAKEN", "That time was just taken");
-        }
-        resourceId = picked.id;
       } else if (
         !stayCreate &&
-        (str(slots, "resource_id", "resource_slug", "resource") ||
+        (str(slots, "resource_id", "resource_slug", "resource", "room_id", "room_slug") ||
           str(slots, "resource_preference") === "specific")
       ) {
         return fail(
@@ -1539,6 +1662,7 @@ export async function executeBookingCommand(
           ends_at: endsAt ? new Date(endsAt).toISOString() : null,
           timezone: createTz,
           resource_id: resourceId,
+          resource_kinds: resourceKinds,
         });
         await audit({
           command,
@@ -1550,6 +1674,7 @@ export async function executeBookingCommand(
             ends_at: booking.ends_at ?? null,
             catalog_item_id: booking.catalog_item_id,
             resource_id: booking.resource_id ?? null,
+            resources: resourceKinds,
           },
         });
         notifyCustomer("created", {
@@ -1568,6 +1693,7 @@ export async function executeBookingCommand(
             timezone: booking.timezone,
             catalog_item_id: booking.catalog_item_id,
             resource_id: booking.resource_id ?? null,
+            resources: resourceKinds,
             shape: stayCreate || booking.ends_at ? "stays" : "appointments",
           },
         });

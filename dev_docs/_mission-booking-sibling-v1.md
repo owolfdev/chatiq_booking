@@ -23,7 +23,11 @@ Owner: Engineering
 6. ~~**`resources`**~~ ✅ **v1 DONE 2026-10-26** — shapes, eligibility, any/specific, `/admin/resources`, concierge tools. Multi-resource linking (staff+room) deferred.
 7. ~~**`stays`**~~ ✅ **v1 DONE 2026-10-26** — `ends_at`, room-type capacity, check-in/out availability, `/admin/stays`, `npm run smoke:stays`, concierge stay slots.
 
-**Optional later:** multi-resource linking; live hotel chat smoke; payments.
+**Optional later:** live hotel/clinic chat smoke; payments.
+
+### Track B+ — Multi-resource linking
+
+8. ~~**Person + room linking**~~ ✅ **DONE 2026-10-26** — `require_resource_kinds`, `booking_resources`, both must be free; `/admin/resources` toggle; `npm run smoke:resource-linking`.
 
 **Live pilot context (do not rediscover):**
 - LINE OA bot: `chatiq-line-guide` / `c967a5c0-b0dc-489e-b778-835b5c294588` — `booking_mode=full`, on ChatIQ `BOOKING_SIBLING_BOT_IDS` (with pilot).
@@ -210,6 +214,18 @@ Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b.0 catalog/
 - [x] Customer notification on admin changes via ChatIQ (2026-10-25)
 
 ## 4) Progress Log
+
+### 2026-10-26 — Multi-resource linking (person + room)
+
+**What changed**
+- Migration `20261026000002_resource_linking.sql`: `catalog_items.require_resource_kinds`, `booking_resources` (+ backfill).
+- Availability/create assign one free resource per required kind; room busy blocks other clinicians at same time.
+- Admin toggle on `/admin/resources`; command `resources.set_service_requirements`.
+- Smoke: `npm run smoke:resource-linking`. Concierge `room_slug`.
+
+**Verified:** typecheck; local smoke (this session).
+
+**Next:** commit/push both repos; optional live chat smoke.
 
 ### 2026-10-26 — Stays shape v1
 

@@ -318,6 +318,7 @@ export type DbCatalogItem = {
   currency?: string | null;
   booking_horizon_days?: number | null;
   min_notice_minutes?: number | null;
+  require_resource_kinds?: string[];
 };
 
 /** Active catalog items for a team/bot (seeds Consultation only when empty). */
@@ -343,6 +344,7 @@ export async function listCatalogItems(input: {
     currency: r.currency,
     booking_horizon_days: r.booking_horizon_days,
     min_notice_minutes: r.min_notice_minutes,
+    require_resource_kinds: r.require_resource_kinds ?? [],
   }));
 }
 
@@ -427,26 +429,78 @@ export async function listOccupiedIntervals(input: {
 }): Promise<Array<{ starts_at: string; ends_at: string }>> {
   const supabase = createBookingAdminClient();
   if (!supabase) return [];
-  let query = supabase
-    .from("bookings")
-    .select("starts_at, catalog_item_id, resource_id")
-    .eq("team_id", input.team_id)
-    .eq("bot_id", input.bot_id)
-    .in("status", ["pending", "confirmed"])
-    .not("starts_at", "is", null);
-  if (input.resource_id) {
-    query = query.eq("resource_id", input.resource_id);
-  } else if (input.unassigned_only) {
-    query = query.is("resource_id", null);
+  type OccRow = {
+    id: string;
+    starts_at: string;
+    catalog_item_id: string | null;
+    resource_id: string | null;
+  };
+  const byBooking = new Map<string, OccRow>();
+
+  const loadBookingsByIds = async (ids: string[]) => {
+    const unique = [...new Set(ids)].filter(Boolean);
+    if (unique.length === 0) return;
+    const { data: rows, error: loadErr } = await supabase
+      .from("bookings")
+      .select("id, starts_at, catalog_item_id, resource_id")
+      .eq("team_id", input.team_id)
+      .eq("bot_id", input.bot_id)
+      .in("status", ["pending", "confirmed"])
+      .in("id", unique)
+      .not("starts_at", "is", null);
+    if (loadErr) {
+      console.warn("[booking] listOccupiedIntervals load failed", loadErr.message);
+      return;
+    }
+    for (const row of rows ?? []) {
+      if (typeof row.starts_at !== "string" || typeof row.id !== "string") continue;
+      byBooking.set(row.id, row as OccRow);
+    }
+  };
+
+  if (input.resource_id && !input.unassigned_only) {
+    const resourceId = input.resource_id;
+    const { data: primary } = await supabase
+      .from("bookings")
+      .select("id")
+      .eq("team_id", input.team_id)
+      .eq("bot_id", input.bot_id)
+      .eq("resource_id", resourceId)
+      .in("status", ["pending", "confirmed"]);
+    const { data: links } = await supabase
+      .from("booking_resources")
+      .select("booking_id")
+      .eq("resource_id", resourceId);
+    await loadBookingsByIds([
+      ...(primary ?? []).map((r) => r.id as string),
+      ...(links ?? []).map((l) => l.booking_id as string),
+    ]);
+  } else {
+    let query = supabase
+      .from("bookings")
+      .select("id, starts_at, catalog_item_id, resource_id")
+      .eq("team_id", input.team_id)
+      .eq("bot_id", input.bot_id)
+      .in("status", ["pending", "confirmed"])
+      .not("starts_at", "is", null);
+    if (input.unassigned_only) {
+      query = query.is("resource_id", null);
+    }
+    const { data, error } = await query;
+    if (error) {
+      console.warn("[booking] listOccupiedIntervals failed", error.message);
+      return [];
+    }
+    for (const row of data ?? []) {
+      if (typeof row.starts_at !== "string" || typeof row.id !== "string") continue;
+      byBooking.set(row.id, row as OccRow);
+    }
   }
-  const { data, error } = await query;
-  if (error) {
-    console.warn("[booking] listOccupiedIntervals failed", error.message);
-    return [];
-  }
+
+  const rows = [...byBooking.values()];
   const catalogIds = [
     ...new Set(
-      (data ?? [])
+      rows
         .map((r) => r.catalog_item_id)
         .filter((id): id is string => typeof id === "string")
     ),
@@ -469,8 +523,7 @@ export async function listOccupiedIntervals(input: {
     }
   }
   const out: Array<{ starts_at: string; ends_at: string }> = [];
-  for (const row of data ?? []) {
-    if (typeof row.starts_at !== "string") continue;
+  for (const row of rows) {
     const m = row.catalog_item_id
       ? meta.get(row.catalog_item_id)
       : undefined;
@@ -740,6 +793,9 @@ export async function createBooking(input: {
   timezone: string;
   /** When set, conflict check is scoped to this resource (capacity 1). */
   resource_id?: string | null;
+  /** Multi-resource links (person+room). Primary resource_id derived if omitted. */
+  resource_ids?: string[] | null;
+  resource_kinds?: Array<{ id: string; kind: string }> | null;
   /** Stay check-out (exclusive). When set, night-range capacity applies. */
   ends_at?: string | null;
 }): Promise<DbBooking> {
@@ -750,7 +806,16 @@ export async function createBooking(input: {
   const endsAt = input.ends_at
     ? new Date(input.ends_at).toISOString()
     : null;
-  const resourceId = input.resource_id?.trim() || null;
+  const linked =
+    input.resource_kinds?.filter((r) => r.id?.trim()) ??
+    (input.resource_ids ?? [])
+      .filter(Boolean)
+      .map((id) => ({ id: id.trim(), kind: "other" }));
+  const resourceId =
+    input.resource_id?.trim() ||
+    linked.find((r) => r.kind === "person")?.id ||
+    linked[0]?.id ||
+    null;
 
   let capacity = 1;
   let duration = 30;
@@ -791,26 +856,48 @@ export async function createBooking(input: {
       throw new SlotConflictError();
     }
   } else {
-    // One booking per resource at a time (v1); service capacity applies only
-    // to the shared appointments calendar.
-    if (resourceId) capacity = 1;
+    // One booking per resource at a time; check every linked resource.
+    const checkIds = linked.length
+      ? [...new Set(linked.map((r) => r.id))]
+      : resourceId
+        ? [resourceId]
+        : [];
+    if (checkIds.length > 0) capacity = 1;
 
     const blockStart =
       new Date(startsAt).getTime() - bufferBefore * 60_000;
     const blockEnd =
       new Date(startsAt).getTime() + (duration + bufferAfter) * 60_000;
-    const occupied = await listOccupiedIntervals({
-      team_id: input.team_id,
-      bot_id: input.bot_id,
-      resource_id: resourceId,
-    });
-    const overlapping = occupied.filter((o) => {
-      const oStart = new Date(o.starts_at).getTime();
-      const oEnd = new Date(o.ends_at).getTime();
-      return blockStart < oEnd && oStart < blockEnd;
-    }).length;
-    if (overlapping >= capacity) {
-      throw new SlotConflictError();
+
+    if (checkIds.length === 0) {
+      const occupied = await listOccupiedIntervals({
+        team_id: input.team_id,
+        bot_id: input.bot_id,
+      });
+      const overlapping = occupied.filter((o) => {
+        const oStart = new Date(o.starts_at).getTime();
+        const oEnd = new Date(o.ends_at).getTime();
+        return blockStart < oEnd && oStart < blockEnd;
+      }).length;
+      if (overlapping >= capacity) {
+        throw new SlotConflictError();
+      }
+    } else {
+      for (const rid of checkIds) {
+        const occupied = await listOccupiedIntervals({
+          team_id: input.team_id,
+          bot_id: input.bot_id,
+          resource_id: rid,
+        });
+        const overlapping = occupied.filter((o) => {
+          const oStart = new Date(o.starts_at).getTime();
+          const oEnd = new Date(o.ends_at).getTime();
+          return blockStart < oEnd && oStart < blockEnd;
+        }).length;
+        if (overlapping >= capacity) {
+          throw new SlotConflictError();
+        }
+      }
     }
   }
 
@@ -839,5 +926,27 @@ export async function createBooking(input: {
     }
     throw new Error(`bookings insert failed: ${error?.message ?? "unknown"}`);
   }
+
+  const toLink =
+    linked.length > 0
+      ? linked
+      : resourceId
+        ? [{ id: resourceId, kind: "person" }]
+        : [];
+  if (toLink.length > 0) {
+    const { error: linkErr } = await supabase.from("booking_resources").insert(
+      toLink.map((r) => ({
+        booking_id: data.id,
+        resource_id: r.id,
+        kind: r.kind === "room" || r.kind === "other" ? r.kind : "person",
+      }))
+    );
+    if (linkErr) {
+      // Best-effort rollback so we don't leave a half-linked booking.
+      await supabase.from("bookings").delete().eq("id", data.id);
+      throw new Error(`booking_resources insert failed: ${linkErr.message}`);
+    }
+  }
+
   return data as DbBooking;
 }

@@ -1,7 +1,7 @@
 # Base app + shape modules (connectability)
 
 Last updated: 2026-10-26  
-Status: **Design locked.** Base + `appointments` · **`resources` v1** · **`stays` v1** shipped. Room type = catalog service; capacity = overlapping inventory; `bookings.ends_at` for check-out. Multi-resource linking (staff + room) still deferred.  
+Status: **Design locked.** Base + `appointments` · **`resources` v1** · **`stays` v1** · **multi-resource linking** shipped. Opt-in per service via `require_resource_kinds` (e.g. person+room); `booking_resources` junction.  
 Mission: [`_mission-booking-sibling-v1.md`](./_mission-booking-sibling-v1.md)  
 Related: [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) · [`booking-command-library.md`](./booking-command-library.md) · [`identity-and-account-linking.md`](./identity-and-account-linking.md)
 
