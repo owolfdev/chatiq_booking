@@ -382,7 +382,7 @@ export async function getBookingById(input: {
   if (!supabase) return null;
   const { data, error } = await supabase
     .from("bookings")
-    .select("id, status, starts_at, timezone, catalog_item_id, resource_id, contact_id")
+    .select("id, status, starts_at, ends_at, timezone, catalog_item_id, resource_id, contact_id")
     .eq("team_id", input.team_id)
     .eq("bot_id", input.bot_id)
     .eq("id", input.booking_id)
@@ -492,6 +492,7 @@ export type DbBooking = {
   id: string;
   status: string;
   starts_at: string | null;
+  ends_at?: string | null;
   timezone: string;
   catalog_item_id: string | null;
   resource_id?: string | null;
@@ -516,7 +517,7 @@ export async function getLatestOpenBooking(input: {
   void input.bot_id;
   const { data, error } = await supabase
     .from("bookings")
-    .select("id, status, starts_at, timezone, catalog_item_id, resource_id")
+    .select("id, status, starts_at, ends_at, timezone, catalog_item_id, resource_id")
     .eq("team_id", input.team_id)
     .eq("contact_id", input.contact_id)
     .in("status", ["pending", "confirmed"])
@@ -528,6 +529,38 @@ export async function getLatestOpenBooking(input: {
     throw new Error(`bookings lookup failed: ${error.message}`);
   }
   return (data as DbBooking | null) ?? null;
+}
+
+/** Open stay bookings (ends_at set) for night-range capacity checks. */
+export async function listStayOccupied(input: {
+  team_id: string;
+  bot_id: string;
+  catalog_item_id?: string | null;
+}): Promise<Array<{ starts_at: string; ends_at: string }>> {
+  const supabase = createBookingAdminClient();
+  if (!supabase) return [];
+  let query = supabase
+    .from("bookings")
+    .select("starts_at, ends_at")
+    .eq("team_id", input.team_id)
+    .eq("bot_id", input.bot_id)
+    .in("status", ["pending", "confirmed"])
+    .not("starts_at", "is", null)
+    .not("ends_at", "is", null);
+  if (input.catalog_item_id) {
+    query = query.eq("catalog_item_id", input.catalog_item_id);
+  }
+  const { data, error } = await query;
+  if (error) {
+    console.warn("[booking] listStayOccupied failed", error.message);
+    return [];
+  }
+  return (data ?? [])
+    .filter(
+      (r): r is { starts_at: string; ends_at: string } =>
+        typeof r.starts_at === "string" && typeof r.ends_at === "string"
+    )
+    .map((r) => ({ starts_at: r.starts_at, ends_at: r.ends_at }));
 }
 
 export type AdminBookingRow = {
@@ -707,11 +740,16 @@ export async function createBooking(input: {
   timezone: string;
   /** When set, conflict check is scoped to this resource (capacity 1). */
   resource_id?: string | null;
+  /** Stay check-out (exclusive). When set, night-range capacity applies. */
+  ends_at?: string | null;
 }): Promise<DbBooking> {
   const supabase = createBookingAdminClient();
   if (!supabase) throw new Error("Supabase not configured");
 
   const startsAt = new Date(input.starts_at).toISOString();
+  const endsAt = input.ends_at
+    ? new Date(input.ends_at).toISOString()
+    : null;
   const resourceId = input.resource_id?.trim() || null;
 
   let capacity = 1;
@@ -733,26 +771,47 @@ export async function createBooking(input: {
       bufferAfter = item.buffer_after_minutes ?? 0;
     }
   }
-  // One booking per resource at a time (v1); service capacity applies only
-  // to the shared appointments calendar.
-  if (resourceId) capacity = 1;
 
-  const blockStart =
-    new Date(startsAt).getTime() - bufferBefore * 60_000;
-  const blockEnd =
-    new Date(startsAt).getTime() + (duration + bufferAfter) * 60_000;
-  const occupied = await listOccupiedIntervals({
-    team_id: input.team_id,
-    bot_id: input.bot_id,
-    resource_id: resourceId,
-  });
-  const overlapping = occupied.filter((o) => {
-    const oStart = new Date(o.starts_at).getTime();
-    const oEnd = new Date(o.ends_at).getTime();
-    return blockStart < oEnd && oStart < blockEnd;
-  }).length;
-  if (overlapping >= capacity) {
-    throw new SlotConflictError();
+  if (endsAt) {
+    if (new Date(endsAt).getTime() <= new Date(startsAt).getTime()) {
+      throw new Error("ends_at must be after starts_at");
+    }
+    const occupied = await listStayOccupied({
+      team_id: input.team_id,
+      bot_id: input.bot_id,
+      catalog_item_id: input.catalog_item_id,
+    });
+    const overlapping = occupied.filter((o) => {
+      return (
+        new Date(startsAt).getTime() < new Date(o.ends_at).getTime() &&
+        new Date(o.starts_at).getTime() < new Date(endsAt).getTime()
+      );
+    }).length;
+    if (overlapping >= capacity) {
+      throw new SlotConflictError();
+    }
+  } else {
+    // One booking per resource at a time (v1); service capacity applies only
+    // to the shared appointments calendar.
+    if (resourceId) capacity = 1;
+
+    const blockStart =
+      new Date(startsAt).getTime() - bufferBefore * 60_000;
+    const blockEnd =
+      new Date(startsAt).getTime() + (duration + bufferAfter) * 60_000;
+    const occupied = await listOccupiedIntervals({
+      team_id: input.team_id,
+      bot_id: input.bot_id,
+      resource_id: resourceId,
+    });
+    const overlapping = occupied.filter((o) => {
+      const oStart = new Date(o.starts_at).getTime();
+      const oEnd = new Date(o.ends_at).getTime();
+      return blockStart < oEnd && oStart < blockEnd;
+    }).length;
+    if (overlapping >= capacity) {
+      throw new SlotConflictError();
+    }
   }
 
   const { data, error } = await supabase
@@ -766,9 +825,12 @@ export async function createBooking(input: {
       resource_id: resourceId,
       status: "confirmed",
       starts_at: startsAt,
+      ends_at: endsAt,
       timezone: input.timezone,
     })
-    .select("id, status, starts_at, timezone, catalog_item_id, resource_id")
+    .select(
+      "id, status, starts_at, ends_at, timezone, catalog_item_id, resource_id"
+    )
     .single();
 
   if (error || !data) {

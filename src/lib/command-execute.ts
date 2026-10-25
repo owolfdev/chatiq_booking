@@ -25,6 +25,11 @@ import {
   isResourceFreeAt,
   searchAvailabilityForResources,
 } from "@/lib/shapes/resources-availability";
+import {
+  nightsBetween,
+  searchStayAvailability,
+  stayDateToUtc,
+} from "@/lib/shapes/stays-availability";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import {
   listCatalogServices,
@@ -78,6 +83,7 @@ import {
   getOrCreateSession,
   listCatalogItems,
   listOccupiedIntervals,
+  listStayOccupied,
   markBookingNoShow,
   resolveOrCreateContact,
   SlotConflictError,
@@ -172,6 +178,24 @@ function resourcePayload(r: DbResource) {
     active: r.active,
     sort_order: r.sort_order,
   };
+}
+
+function isStayAvailabilityRequest(
+  slots: Slots,
+  shapes: string[]
+): boolean {
+  if (!botHasShape(shapes, "stays")) return false;
+  const mode = str(slots, "mode", "booking_kind", "shape");
+  if (mode === "stay" || mode === "stays") return true;
+  if (
+    str(slots, "check_in", "checkin", "arrival") ||
+    str(slots, "check_out", "checkout", "departure") ||
+    (typeof slots.nights === "number" && Number.isFinite(slots.nights))
+  ) {
+    return true;
+  }
+  // Stays-only bot: night search is the default.
+  return !botHasShape(shapes, "appointments");
 }
 
 async function resolveResourceFromSlots(input: {
@@ -409,10 +433,90 @@ export async function executeBookingCommand(
       await ensureDefaultHoursIfEmpty({ team_id, bot_id });
       const settings = await getBotBookingSettings({ team_id, bot_id });
       const tz = settings.timezone || timezone;
-      const hourRows = await listHours({ team_id, bot_id });
-      const hoursByWeekday = groupHoursByWeekday(hourRows);
       const dateFrom = str(slots, "date_from", "from") ?? undefined;
       const dateTo = str(slots, "date_to", "to") ?? undefined;
+      const limitRaw = slots.limit;
+      const count =
+        typeof limitRaw === "number" && Number.isFinite(limitRaw)
+          ? limitRaw
+          : undefined;
+
+      if (isStayAvailabilityRequest(slots, settings.shapes)) {
+        if (!botHasShape(settings.shapes, "stays")) {
+          return fail(
+            command,
+            "SHAPE_DISABLED",
+            "stays shape is not enabled for this bot"
+          );
+        }
+        const checkIn = str(slots, "check_in", "checkin", "arrival");
+        const checkOut = str(slots, "check_out", "checkout", "departure");
+        const nightsRaw = slots.nights;
+        const nights =
+          typeof nightsRaw === "number" && Number.isFinite(nightsRaw)
+            ? nightsRaw
+            : checkIn && checkOut
+              ? nightsBetween(checkIn, checkOut)
+              : undefined;
+        const occupied = await listStayOccupied({
+          team_id,
+          bot_id,
+          catalog_item_id: svc.item.id,
+        });
+        const found = searchStayAvailability({
+          timeZone: tz,
+          checkIn: checkIn ?? undefined,
+          checkOut: checkOut ?? undefined,
+          nights,
+          dateFrom,
+          dateTo,
+          capacity: svc.item.capacity ?? 1,
+          occupied,
+          minNoticeMinutes:
+            svc.item.min_notice_minutes ?? settings.min_notice_minutes,
+          bookingHorizonDays:
+            svc.item.booking_horizon_days ?? settings.booking_horizon_days,
+          count,
+        });
+        return ok(command, {
+          shape: "stays",
+          service: {
+            id: svc.item.id,
+            slug: svc.item.slug,
+            title: svc.item.title,
+            capacity: svc.item.capacity ?? 1,
+          },
+          slots: found.map((s) => ({
+            check_in: s.check_in,
+            check_out: s.check_out,
+            nights: s.nights,
+            starts_at: s.starts_at,
+            ends_at: s.ends_at,
+            label: s.label,
+            remaining: s.remaining,
+            timezone: tz,
+          })),
+          timezone: tz,
+        });
+      }
+
+      // Stay params without the shape → fail closed.
+      if (
+        str(slots, "check_in", "checkin") ||
+        str(slots, "check_out", "checkout") ||
+        (typeof slots.nights === "number" && Number.isFinite(slots.nights)) ||
+        str(slots, "mode", "booking_kind") === "stay" ||
+        str(slots, "mode", "booking_kind") === "stays"
+      ) {
+        return fail(
+          command,
+          "SHAPE_DISABLED",
+          "stays shape is not enabled for this bot"
+        );
+      }
+
+      const hourRows = await listHours({ team_id, bot_id });
+      const hoursByWeekday = groupHoursByWeekday(hourRows);
       const exceptions = await listExceptions({
         team_id,
         bot_id,
@@ -425,11 +529,6 @@ export async function executeBookingCommand(
         from: dateFrom,
         to: dateTo,
       });
-      const limitRaw = slots.limit;
-      const count =
-        typeof limitRaw === "number" && Number.isFinite(limitRaw)
-          ? limitRaw
-          : undefined;
       const commonAvail = {
         timeZone: tz,
         hoursByWeekday,
@@ -1279,6 +1378,7 @@ export async function executeBookingCommand(
               timezone: booking.timezone,
               catalog_item_id: booking.catalog_item_id,
               resource_id: booking.resource_id ?? null,
+              ends_at: booking.ends_at ?? null,
             }
           : null,
       });
@@ -1287,16 +1387,82 @@ export async function executeBookingCommand(
     if (command === "booking.create") {
       const svc = resolveService(items, slots);
       if ("error" in svc) return { ...svc.error, command };
-      const startsAt = str(slots, "starts_at", "start_at", "slot");
+      const createSettings = await getBotBookingSettings({ team_id, bot_id });
+      const createTz = createSettings.timezone || timezone;
+      let stayCreate = isStayAvailabilityRequest(slots, createSettings.shapes);
+      // Offered stay slots include ends_at even when check_in was omitted on create.
+      if (
+        !stayCreate &&
+        botHasShape(createSettings.shapes, "stays") &&
+        str(slots, "ends_at", "end_at")
+      ) {
+        stayCreate = true;
+      }
+
+      let startsAt = str(slots, "starts_at", "start_at", "slot");
+      let endsAt: string | null = str(slots, "ends_at", "end_at");
+      if (stayCreate) {
+        if (!botHasShape(createSettings.shapes, "stays")) {
+          return fail(
+            command,
+            "SHAPE_DISABLED",
+            "stays shape is not enabled for this bot"
+          );
+        }
+        const checkIn = str(slots, "check_in", "checkin", "arrival");
+        const checkOut = str(slots, "check_out", "checkout", "departure");
+        if (checkIn && checkOut) {
+          const start = stayDateToUtc(checkIn, createTz);
+          const end = stayDateToUtc(checkOut, createTz);
+          if (!start || !end || nightsBetween(checkIn, checkOut) < 1) {
+            return fail(
+              command,
+              "INVALID_REQUEST",
+              "check_in and check_out must be YYYY-MM-DD with at least 1 night"
+            );
+          }
+          startsAt = start.toISOString();
+          endsAt = end.toISOString();
+        } else if (startsAt && endsAt) {
+          // offered slot ISO pair
+        } else {
+          return fail(
+            command,
+            "INVALID_REQUEST",
+            "stays require check_in+check_out or starts_at+ends_at from get_availability"
+          );
+        }
+      } else if (
+        str(slots, "check_in", "checkin") ||
+        str(slots, "check_out", "checkout") ||
+        str(slots, "mode") === "stay"
+      ) {
+        return fail(
+          command,
+          "SHAPE_DISABLED",
+          "stays shape is not enabled for this bot"
+        );
+      }
+
       if (!startsAt || Number.isNaN(new Date(startsAt).getTime())) {
         return fail(command, "INVALID_REQUEST", "slots.starts_at (ISO) is required");
       }
       if (!isFuture(startsAt)) {
         return fail(command, "SLOT_IN_PAST", "starts_at must be in the future");
       }
-      const createSettings = await getBotBookingSettings({ team_id, bot_id });
+      if (endsAt && Number.isNaN(new Date(endsAt).getTime())) {
+        return fail(command, "INVALID_REQUEST", "slots.ends_at must be ISO");
+      }
+      if (endsAt && new Date(endsAt).getTime() <= new Date(startsAt).getTime()) {
+        return fail(
+          command,
+          "INVALID_REQUEST",
+          "ends_at must be after starts_at"
+        );
+      }
+
       let resourceId: string | null = null;
-      if (botHasShape(createSettings.shapes, "resources")) {
+      if (!stayCreate && botHasShape(createSettings.shapes, "resources")) {
         const eligible = await listEligibleResources({
           team_id,
           bot_id,
@@ -1345,8 +1511,9 @@ export async function executeBookingCommand(
         }
         resourceId = picked.id;
       } else if (
-        str(slots, "resource_id", "resource_slug", "resource") ||
-        str(slots, "resource_preference") === "specific"
+        !stayCreate &&
+        (str(slots, "resource_id", "resource_slug", "resource") ||
+          str(slots, "resource_preference") === "specific")
       ) {
         return fail(
           command,
@@ -1359,7 +1526,7 @@ export async function executeBookingCommand(
         bot_id,
         contact_id: contactId,
         conversation_id: body.conversation_id ?? null,
-        timezone,
+        timezone: createTz,
       });
       try {
         const booking = await createBooking({
@@ -1369,7 +1536,8 @@ export async function executeBookingCommand(
           session_id: session.id,
           catalog_item_id: svc.item.id,
           starts_at: new Date(startsAt).toISOString(),
-          timezone,
+          ends_at: endsAt ? new Date(endsAt).toISOString() : null,
+          timezone: createTz,
           resource_id: resourceId,
         });
         await audit({
@@ -1379,6 +1547,7 @@ export async function executeBookingCommand(
             booking_id: booking.id,
             status: booking.status,
             starts_at: booking.starts_at,
+            ends_at: booking.ends_at ?? null,
             catalog_item_id: booking.catalog_item_id,
             resource_id: booking.resource_id ?? null,
           },
@@ -1395,9 +1564,11 @@ export async function executeBookingCommand(
             id: booking.id,
             status: booking.status,
             starts_at: booking.starts_at,
+            ends_at: booking.ends_at ?? null,
             timezone: booking.timezone,
             catalog_item_id: booking.catalog_item_id,
             resource_id: booking.resource_id ?? null,
+            shape: stayCreate || booking.ends_at ? "stays" : "appointments",
           },
         });
       } catch (err) {

@@ -1,12 +1,12 @@
 # Mission: Booking sibling v1 (`chatiq-booking`)
 
 Last updated: 2026-10-26  
-Status: **Base + appointments ✅** · **`resources` v1 ✅** (2026-10-26). **Next: `stays`** (or ChatIQ concierge resource slots). Workspace: [`ROADMAP.md`](../../ROADMAP.md) §A vs §B. Design: [`booking-command-library.md`](./booking-command-library.md) · Identity: [`identity-and-account-linking.md`](./identity-and-account-linking.md) · Catalog: [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) · Modules: [`base-and-shape-modules.md`](./base-and-shape-modules.md).  
+Status: **Base + appointments ✅** · **`resources` v1 ✅** · **`stays` v1 ✅** (2026-10-26). Shape-module track for the three planned shapes is complete. Workspace: [`ROADMAP.md`](../../ROADMAP.md) §A vs §B. Design: [`booking-command-library.md`](./booking-command-library.md) · Identity: [`identity-and-account-linking.md`](./identity-and-account-linking.md) · Catalog: [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) · Modules: [`base-and-shape-modules.md`](./base-and-shape-modules.md).  
 Owner: Engineering
 
 ## Resume here (next session)
 
-**Base track is closed.** **`resources` v1 is live** (migration applied; local smoke). Do this next:
+**Shape modules A–C done.** Optional next:
 
 ### Track A — Base + appointments (complete)
 
@@ -16,14 +16,14 @@ Owner: Engineering
 4. ~~**Phase 3b.0 — Service catalog & hours**~~ ✅ **DONE 2026-10-25**
 5. ~~**Phase 3b — Admin doors**~~ ✅ **DONE 2026-10-25** (Schedule → Copilot + customer notify)
 
-**Optional A polish (does not block B):** large-catalog concierge prompts; widen allowlist; Vercel concierge flag; WS-D archive; payments.
+**Optional A polish:** large-catalog concierge prompts; widen allowlist; Vercel concierge flag; WS-D archive; payments.
 
 ### Track B — Shape modules
 
-6. ~~**`resources`**~~ ✅ **v1 DONE 2026-10-26** — shapes config, eligibility, any/specific, independent calendars, `/admin/resources`, `npm run smoke:resources`. Multi-resource linking (staff+room) deferred. Spec: [`base-and-shape-modules.md`](./base-and-shape-modules.md).
-7. **`stays`** — **← START HERE** hotel nights / inventory when a real customer needs it. Same app, not a new sibling.
+6. ~~**`resources`**~~ ✅ **v1 DONE 2026-10-26** — shapes, eligibility, any/specific, `/admin/resources`, concierge tools. Multi-resource linking (staff+room) deferred.
+7. ~~**`stays`**~~ ✅ **v1 DONE 2026-10-26** — `ends_at`, room-type capacity, check-in/out availability, `/admin/stays`, `npm run smoke:stays`, concierge stay slots.
 
-**Done alongside resources:** ChatIQ concierge tools for capabilities / `resources.list` / any-vs-specific (2026-10-26).
+**Optional later:** multi-resource linking; live hotel chat smoke; payments.
 
 **Live pilot context (do not rediscover):**
 - LINE OA bot: `chatiq-line-guide` / `c967a5c0-b0dc-489e-b778-835b5c294588` — `booking_mode=full`, on ChatIQ `BOOKING_SIBLING_BOT_IDS` (with pilot).
@@ -210,6 +210,25 @@ Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b.0 catalog/
 - [x] Customer notification on admin changes via ChatIQ (2026-10-25)
 
 ## 4) Progress Log
+
+### 2026-10-26 — Stays shape v1
+
+**What changed**
+- Migration `20261026000001_stays_shape.sql`: `bookings.ends_at` (applied).
+- Stay availability: check_in/check_out or nights + window; capacity = overlapping inventory per room-type catalog item.
+- Create/reschedule path stores ends_at; shape gate `SHAPE_DISABLED` when stays off.
+- Admin `/admin/stays`; smoke `npm run smoke:stays`.
+- ChatIQ concierge: stay params on availability/create + hotel intent keywords.
+
+**Verified:** typecheck; local smoke:stays (this session).
+
+**Approx. toward DoD:**
+
+```text
+chatiq-booking: Shape modules (resources→stays): [####################] ~100% -> DoD
+```
+
+**Next:** deploy both apps; optional multi-resource linking or live hotel smoke.
 
 ### 2026-10-26 — Concierge resource tools (ChatIQ)
 
