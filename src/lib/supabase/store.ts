@@ -382,7 +382,7 @@ export async function getBookingById(input: {
   if (!supabase) return null;
   const { data, error } = await supabase
     .from("bookings")
-    .select("id, status, starts_at, timezone, catalog_item_id, contact_id")
+    .select("id, status, starts_at, timezone, catalog_item_id, resource_id, contact_id")
     .eq("team_id", input.team_id)
     .eq("bot_id", input.bot_id)
     .eq("id", input.booking_id)
@@ -420,16 +420,26 @@ export async function listTakenStarts(input: {
 export async function listOccupiedIntervals(input: {
   team_id: string;
   bot_id: string;
+  /** When set, only bookings for this resource (resources shape). */
+  resource_id?: string | null;
+  /** When true, only bookings that have no resource_id (legacy shared calendar). */
+  unassigned_only?: boolean;
 }): Promise<Array<{ starts_at: string; ends_at: string }>> {
   const supabase = createBookingAdminClient();
   if (!supabase) return [];
-  const { data, error } = await supabase
+  let query = supabase
     .from("bookings")
-    .select("starts_at, catalog_item_id")
+    .select("starts_at, catalog_item_id, resource_id")
     .eq("team_id", input.team_id)
     .eq("bot_id", input.bot_id)
     .in("status", ["pending", "confirmed"])
     .not("starts_at", "is", null);
+  if (input.resource_id) {
+    query = query.eq("resource_id", input.resource_id);
+  } else if (input.unassigned_only) {
+    query = query.is("resource_id", null);
+  }
+  const { data, error } = await query;
   if (error) {
     console.warn("[booking] listOccupiedIntervals failed", error.message);
     return [];
@@ -484,6 +494,7 @@ export type DbBooking = {
   starts_at: string | null;
   timezone: string;
   catalog_item_id: string | null;
+  resource_id?: string | null;
   contact_id?: string;
 };
 
@@ -505,7 +516,7 @@ export async function getLatestOpenBooking(input: {
   void input.bot_id;
   const { data, error } = await supabase
     .from("bookings")
-    .select("id, status, starts_at, timezone, catalog_item_id")
+    .select("id, status, starts_at, timezone, catalog_item_id, resource_id")
     .eq("team_id", input.team_id)
     .eq("contact_id", input.contact_id)
     .in("status", ["pending", "confirmed"])
@@ -694,11 +705,14 @@ export async function createBooking(input: {
   catalog_item_id: string | null;
   starts_at: string;
   timezone: string;
+  /** When set, conflict check is scoped to this resource (capacity 1). */
+  resource_id?: string | null;
 }): Promise<DbBooking> {
   const supabase = createBookingAdminClient();
   if (!supabase) throw new Error("Supabase not configured");
 
   const startsAt = new Date(input.starts_at).toISOString();
+  const resourceId = input.resource_id?.trim() || null;
 
   let capacity = 1;
   let duration = 30;
@@ -719,6 +733,9 @@ export async function createBooking(input: {
       bufferAfter = item.buffer_after_minutes ?? 0;
     }
   }
+  // One booking per resource at a time (v1); service capacity applies only
+  // to the shared appointments calendar.
+  if (resourceId) capacity = 1;
 
   const blockStart =
     new Date(startsAt).getTime() - bufferBefore * 60_000;
@@ -727,6 +744,7 @@ export async function createBooking(input: {
   const occupied = await listOccupiedIntervals({
     team_id: input.team_id,
     bot_id: input.bot_id,
+    resource_id: resourceId,
   });
   const overlapping = occupied.filter((o) => {
     const oStart = new Date(o.starts_at).getTime();
@@ -745,11 +763,12 @@ export async function createBooking(input: {
       contact_id: input.contact_id,
       session_id: input.session_id,
       catalog_item_id: input.catalog_item_id,
+      resource_id: resourceId,
       status: "confirmed",
       starts_at: startsAt,
       timezone: input.timezone,
     })
-    .select("id, status, starts_at, timezone, catalog_item_id")
+    .select("id, status, starts_at, timezone, catalog_item_id, resource_id")
     .single();
 
   if (error || !data) {

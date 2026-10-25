@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "smoke:commands": "node scripts/smoke-commands.mjs",
     "smoke:identity": "node scripts/smoke-identity.mjs",
-    "smoke:catalog": "node scripts/smoke-catalog.mjs"
+    "smoke:catalog": "node scripts/smoke-catalog.mjs",
+    "smoke:resources": "node scripts/smoke-resources.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",

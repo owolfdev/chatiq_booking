@@ -1,3 +1,5 @@
+import { normalizeShapes } from "@/lib/shapes";
+
 import { createBookingAdminClient } from "./admin";
 
 export type BotBookingSettings = {
@@ -70,9 +72,6 @@ export async function getBotBookingSettings(input: {
   if (!data) {
     return { ...DEFAULT_SETTINGS, team_id: input.team_id, bot_id: input.bot_id };
   }
-  const shapes = Array.isArray(data.shapes)
-    ? (data.shapes as unknown[]).map(String)
-    : DEFAULT_SETTINGS.shapes;
   return {
     team_id: data.team_id,
     bot_id: data.bot_id,
@@ -80,7 +79,7 @@ export async function getBotBookingSettings(input: {
     booking_horizon_days: data.booking_horizon_days,
     min_notice_minutes: data.min_notice_minutes,
     slot_step_minutes: data.slot_step_minutes,
-    shapes,
+    shapes: normalizeShapes(data.shapes),
   };
 }
 
@@ -104,7 +103,7 @@ export async function upsertBotBookingSettings(input: {
       input.booking_horizon_days ?? current.booking_horizon_days,
     min_notice_minutes: input.min_notice_minutes ?? current.min_notice_minutes,
     slot_step_minutes: input.slot_step_minutes ?? current.slot_step_minutes,
-    shapes: input.shapes ?? current.shapes,
+    shapes: normalizeShapes(input.shapes ?? current.shapes),
     updated_at: new Date().toISOString(),
   };
   const { data, error } = await supabase
@@ -117,9 +116,7 @@ export async function upsertBotBookingSettings(input: {
   if (error) throw new Error(`bot_booking_settings upsert failed: ${error.message}`);
   return {
     ...data,
-    shapes: Array.isArray(data.shapes)
-      ? (data.shapes as unknown[]).map(String)
-      : DEFAULT_SETTINGS.shapes,
+    shapes: normalizeShapes(data.shapes),
   } as BotBookingSettings;
 }
 

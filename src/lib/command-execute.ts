@@ -20,6 +20,11 @@ import {
   type BookingCommandExecuteRequest,
   type BookingCommandExecuteResponse,
 } from "@/lib/contract";
+import { botHasShape, normalizeShapes } from "@/lib/shapes";
+import {
+  isResourceFreeAt,
+  searchAvailabilityForResources,
+} from "@/lib/shapes/resources-availability";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import {
   listCatalogServices,
@@ -53,6 +58,16 @@ import {
   resolveSurvivorContactId,
   unmergeFromAudit,
 } from "@/lib/supabase/identity";
+import {
+  getResource,
+  listEligibleResources,
+  listResources,
+  mapServiceResourceAnnotations,
+  setResourceActive,
+  setServiceResources,
+  upsertResource,
+  type DbResource,
+} from "@/lib/supabase/resources";
 import {
   cancelBooking,
   createBooking,
@@ -148,6 +163,77 @@ function isFuture(iso: string | null): boolean {
   return Boolean(iso) && new Date(iso as string).getTime() > Date.now();
 }
 
+function resourcePayload(r: DbResource) {
+  return {
+    id: r.id,
+    slug: r.slug,
+    title: r.title,
+    kind: r.kind,
+    active: r.active,
+    sort_order: r.sort_order,
+  };
+}
+
+async function resolveResourceFromSlots(input: {
+  team_id: string;
+  bot_id: string;
+  slots: Slots;
+  eligible: DbResource[];
+}): Promise<
+  | { resource: DbResource | null; preference: "any" | "specific" }
+  | { error: BookingCommandExecuteResponse }
+> {
+  const wanted = str(
+    input.slots,
+    "resource_id",
+    "resource_slug",
+    "resource",
+    "provider_id",
+    "clinician"
+  );
+  const prefRaw = str(input.slots, "resource_preference", "preference");
+  const preference: "any" | "specific" =
+    wanted || prefRaw === "specific" ? "specific" : "any";
+
+  if (!wanted) {
+    return { resource: null, preference };
+  }
+
+  const lower = wanted.toLowerCase();
+  const fromEligible = input.eligible.find(
+    (r) =>
+      r.id === wanted ||
+      r.slug.toLowerCase() === lower ||
+      r.title.toLowerCase() === lower
+  );
+  if (fromEligible) return { resource: fromEligible, preference: "specific" };
+
+  const found = await getResource({
+    team_id: input.team_id,
+    bot_id: input.bot_id,
+    id_or_slug: wanted,
+  });
+  if (!found || !found.active) {
+    return {
+      error: fail(
+        undefined,
+        "RESOURCE_NOT_FOUND",
+        `Unknown resource: ${wanted}`
+      ),
+    };
+  }
+  if (!input.eligible.some((r) => r.id === found.id)) {
+    return {
+      error: fail(
+        undefined,
+        "RESOURCE_NOT_ELIGIBLE",
+        `${found.title} cannot deliver this service`
+      ),
+    };
+  }
+  return { resource: found, preference: "specific" };
+}
+
 export async function executeBookingCommand(
   body: BookingCommandExecuteRequest
 ): Promise<BookingCommandExecuteResponse> {
@@ -239,6 +325,17 @@ export async function executeBookingCommand(
       });
     };
 
+    if (command === "booking.get_bot_capabilities") {
+      const settings = await getBotBookingSettings({ team_id, bot_id });
+      const shapes = normalizeShapes(settings.shapes);
+      return ok(command, {
+        shapes,
+        resources_enabled: shapes.includes("resources"),
+        stays_enabled: shapes.includes("stays"),
+        timezone: settings.timezone || timezone,
+      });
+    }
+
     if (command === "booking.list_services") {
       const includeInactive =
         Boolean(slots.include_inactive) && (isStaff || actor.type === "system");
@@ -249,6 +346,15 @@ export async function executeBookingCommand(
             active_only: false,
           })
         : items;
+      const settings = await getBotBookingSettings({ team_id, bot_id });
+      const annotateResources = botHasShape(settings.shapes, "resources");
+      const resourceMap = annotateResources
+        ? await mapServiceResourceAnnotations({
+            team_id,
+            bot_id,
+            catalog_item_ids: list.map((i) => i.id),
+          })
+        : null;
       return ok(command, {
         services: list.map((i) => ({
           id: i.id,
@@ -264,7 +370,11 @@ export async function executeBookingCommand(
           capacity: i.capacity ?? 1,
           price_cents: i.price_cents ?? null,
           currency: i.currency ?? null,
+          ...(resourceMap
+            ? { resources: resourceMap.get(i.id) ?? [] }
+            : {}),
         })),
+        shapes: normalizeShapes(settings.shapes),
         timezone,
       });
     }
@@ -315,18 +425,19 @@ export async function executeBookingCommand(
         from: dateFrom,
         to: dateTo,
       });
-      const occupied = await listOccupiedIntervals({ team_id, bot_id });
       const limitRaw = slots.limit;
-      const found = searchAvailability({
+      const count =
+        typeof limitRaw === "number" && Number.isFinite(limitRaw)
+          ? limitRaw
+          : undefined;
+      const commonAvail = {
         timeZone: tz,
         hoursByWeekday,
         exceptions,
         blocks,
-        occupied,
         durationMinutes: svc.item.duration_minutes,
         bufferBeforeMinutes: svc.item.buffer_before_minutes ?? 0,
         bufferAfterMinutes: svc.item.buffer_after_minutes ?? 0,
-        capacity: svc.item.capacity ?? 1,
         slotStepMinutes: settings.slot_step_minutes,
         minNoticeMinutes:
           svc.item.min_notice_minutes ?? settings.min_notice_minutes,
@@ -335,10 +446,91 @@ export async function executeBookingCommand(
         dateFrom,
         dateTo,
         timeOfDay: normalizeTimeOfDay(slots.time_of_day),
-        count:
-          typeof limitRaw === "number" && Number.isFinite(limitRaw)
-            ? limitRaw
-            : undefined,
+        count,
+      };
+
+      if (botHasShape(settings.shapes, "resources")) {
+        const eligible = await listEligibleResources({
+          team_id,
+          bot_id,
+          catalog_item_id: svc.item.id,
+          active_only: true,
+        });
+        if (eligible.length === 0) {
+          return fail(
+            command,
+            "NO_ELIGIBLE_RESOURCES",
+            "No resources are linked to this service"
+          );
+        }
+        const resolved = await resolveResourceFromSlots({
+          team_id,
+          bot_id,
+          slots,
+          eligible,
+        });
+        if ("error" in resolved) return { ...resolved.error, command };
+        const pool = resolved.resource
+          ? [resolved.resource]
+          : eligible;
+        const occupiedByResource = new Map<
+          string,
+          Awaited<ReturnType<typeof listOccupiedIntervals>>
+        >();
+        for (const r of pool) {
+          occupiedByResource.set(
+            r.id,
+            await listOccupiedIntervals({
+              team_id,
+              bot_id,
+              resource_id: r.id,
+            })
+          );
+        }
+        const found = await searchAvailabilityForResources({
+          ...commonAvail,
+          resources: pool,
+          occupiedByResource,
+        });
+        return ok(command, {
+          service: {
+            id: svc.item.id,
+            slug: svc.item.slug,
+            title: svc.item.title,
+            duration_minutes: svc.item.duration_minutes,
+          },
+          resource_preference: resolved.preference,
+          resources: pool.map(resourcePayload),
+          slots: found.map((s) => ({
+            starts_at: s.starts_at,
+            label: s.label,
+            timezone: tz,
+            resource_id: s.resource_id,
+            resource_slug: s.resource_slug,
+            resource_title: s.resource_title,
+            resource_kind: s.resource_kind,
+          })),
+          timezone: tz,
+        });
+      }
+
+      // Resource slots without the shape → fail closed.
+      if (
+        str(slots, "resource_id", "resource_slug", "resource") ||
+        str(slots, "resource_preference") === "specific"
+      ) {
+        return fail(
+          command,
+          "SHAPE_DISABLED",
+          "resources shape is not enabled for this bot"
+        );
+      }
+
+      const occupied = await listOccupiedIntervals({ team_id, bot_id });
+      const found = searchAvailability({
+        ...commonAvail,
+        occupied,
+        capacity: svc.item.capacity ?? 1,
       });
       return ok(command, {
         service: {
@@ -461,10 +653,197 @@ export async function executeBookingCommand(
       }
     }
 
+    // --- Resources (list is customer+staff; mutations staff-only) ---
+    if (command.startsWith("resources.")) {
+      const settings = await getBotBookingSettings({ team_id, bot_id });
+      const resourcesOn = botHasShape(settings.shapes, "resources");
+
+      if (command === "resources.list") {
+        // Allow list even when shape off so admin can prep data before enable;
+        // customer still sees empty when shape off (fail closed for booking path).
+        if (!resourcesOn && !isStaff && !isSystem) {
+          return fail(
+            command,
+            "SHAPE_DISABLED",
+            "resources shape is not enabled for this bot"
+          );
+        }
+        const includeInactive =
+          Boolean(slots.include_inactive) && (isStaff || isSystem);
+        let list = await listResources({
+          team_id,
+          bot_id,
+          active_only: !includeInactive,
+        });
+        const serviceKey = str(slots, "service_id", "service_slug", "service");
+        if (serviceKey) {
+          const svc = resolveService(items, slots);
+          if ("error" in svc) return { ...svc.error, command };
+          const eligible = await listEligibleResources({
+            team_id,
+            bot_id,
+            catalog_item_id: svc.item.id,
+            active_only: !includeInactive,
+          });
+          list = eligible;
+        }
+        return ok(command, {
+          resources: list.map(resourcePayload),
+          shapes: normalizeShapes(settings.shapes),
+          resources_enabled: resourcesOn,
+        });
+      }
+
+      if (!isStaff && !isSystem) {
+        return fail(command, "FORBIDDEN", "Admin actor required");
+      }
+
+      if (command === "resources.upsert") {
+        const title = str(slots, "title");
+        if (!title) {
+          return fail(command, "INVALID_REQUEST", "title is required");
+        }
+        try {
+          const resource = await upsertResource({
+            team_id,
+            bot_id,
+            id: str(slots, "id", "resource_id"),
+            slug: str(slots, "slug"),
+            title,
+            kind: str(slots, "kind"),
+            sort_order:
+              typeof slots.sort_order === "number" ? slots.sort_order : undefined,
+            active:
+              typeof slots.active === "boolean" ? slots.active : undefined,
+          });
+          await audit({
+            command,
+            after: resourcePayload(resource),
+          });
+          return ok(command, { resource: resourcePayload(resource) });
+        } catch (err) {
+          return fail(
+            command,
+            "INVALID_REQUEST",
+            err instanceof Error ? err.message : "upsert failed"
+          );
+        }
+      }
+
+      if (command === "resources.set_active") {
+        const idOrSlug = str(slots, "id", "resource_id", "slug", "resource_slug");
+        if (!idOrSlug || typeof slots.active !== "boolean") {
+          return fail(
+            command,
+            "INVALID_REQUEST",
+            "id/slug and active (boolean) are required"
+          );
+        }
+        try {
+          const resource = await setResourceActive({
+            team_id,
+            bot_id,
+            id_or_slug: idOrSlug,
+            active: slots.active,
+          });
+          await audit({
+            command,
+            after: resourcePayload(resource),
+          });
+          return ok(command, { resource: resourcePayload(resource) });
+        } catch {
+          return fail(command, "RESOURCE_NOT_FOUND", `Unknown resource: ${idOrSlug}`);
+        }
+      }
+
+      if (command === "resources.set_service_eligibility") {
+        const svc = resolveService(items, slots);
+        if ("error" in svc) return { ...svc.error, command };
+        const idsRaw = slots.resource_ids ?? slots.resources;
+        if (!Array.isArray(idsRaw)) {
+          return fail(
+            command,
+            "INVALID_REQUEST",
+            "resource_ids array is required (use [] to clear)"
+          );
+        }
+        try {
+          const resource_ids = await setServiceResources({
+            team_id,
+            bot_id,
+            catalog_item_id: svc.item.id,
+            resource_ids: idsRaw.map(String),
+          });
+          await audit({
+            command,
+            after: {
+              service_id: svc.item.id,
+              resource_ids,
+            },
+          });
+          return ok(command, {
+            service_id: svc.item.id,
+            resource_ids,
+          });
+        } catch (err) {
+          return fail(
+            command,
+            "INVALID_REQUEST",
+            err instanceof Error ? err.message : "set_service_eligibility failed"
+          );
+        }
+      }
+
+      return fail(command, "UNKNOWN_COMMAND", `Unknown command: ${command}`);
+    }
+
     // --- Admin catalog / hours (staff only; no customer identity) ---
     if (command.startsWith("catalog.") || command.startsWith("availability.")) {
       if (!isStaff && !isSystem) {
         return fail(command, "FORBIDDEN", "Admin actor required");
+      }
+
+      if (command === "availability.set_settings") {
+        try {
+          const shapesRaw = slots.shapes;
+          const settings = await upsertBotBookingSettings({
+            team_id,
+            bot_id,
+            timezone: str(slots, "timezone") ?? undefined,
+            booking_horizon_days:
+              typeof slots.booking_horizon_days === "number"
+                ? slots.booking_horizon_days
+                : undefined,
+            min_notice_minutes:
+              typeof slots.min_notice_minutes === "number"
+                ? slots.min_notice_minutes
+                : undefined,
+            slot_step_minutes:
+              typeof slots.slot_step_minutes === "number"
+                ? slots.slot_step_minutes
+                : undefined,
+            shapes: Array.isArray(shapesRaw)
+              ? shapesRaw.map(String)
+              : undefined,
+          });
+          await audit({
+            command,
+            after: {
+              timezone: settings.timezone,
+              shapes: settings.shapes,
+              booking_horizon_days: settings.booking_horizon_days,
+              min_notice_minutes: settings.min_notice_minutes,
+              slot_step_minutes: settings.slot_step_minutes,
+            },
+          });
+          return ok(command, { settings });
+        } catch (err) {
+          return fail(
+            command,
+            "INVALID_REQUEST",
+            err instanceof Error ? err.message : "set_settings failed"
+          );
+        }
       }
 
       if (command === "catalog.upsert_service") {
@@ -899,6 +1278,7 @@ export async function executeBookingCommand(
               starts_at: booking.starts_at,
               timezone: booking.timezone,
               catalog_item_id: booking.catalog_item_id,
+              resource_id: booking.resource_id ?? null,
             }
           : null,
       });
@@ -913,6 +1293,66 @@ export async function executeBookingCommand(
       }
       if (!isFuture(startsAt)) {
         return fail(command, "SLOT_IN_PAST", "starts_at must be in the future");
+      }
+      const createSettings = await getBotBookingSettings({ team_id, bot_id });
+      let resourceId: string | null = null;
+      if (botHasShape(createSettings.shapes, "resources")) {
+        const eligible = await listEligibleResources({
+          team_id,
+          bot_id,
+          catalog_item_id: svc.item.id,
+          active_only: true,
+        });
+        if (eligible.length === 0) {
+          return fail(
+            command,
+            "NO_ELIGIBLE_RESOURCES",
+            "No resources are linked to this service"
+          );
+        }
+        const resolved = await resolveResourceFromSlots({
+          team_id,
+          bot_id,
+          slots,
+          eligible,
+        });
+        if ("error" in resolved) return { ...resolved.error, command };
+        const pool = resolved.resource ? [resolved.resource] : eligible;
+        let picked: DbResource | null = resolved.resource;
+        if (!picked) {
+          for (const r of pool) {
+            const occupied = await listOccupiedIntervals({
+              team_id,
+              bot_id,
+              resource_id: r.id,
+            });
+            if (
+              isResourceFreeAt({
+                starts_at: startsAt,
+                durationMinutes: svc.item.duration_minutes,
+                bufferBeforeMinutes: svc.item.buffer_before_minutes ?? 0,
+                bufferAfterMinutes: svc.item.buffer_after_minutes ?? 0,
+                occupied,
+              })
+            ) {
+              picked = r;
+              break;
+            }
+          }
+        }
+        if (!picked) {
+          return fail(command, "SLOT_TAKEN", "That time was just taken");
+        }
+        resourceId = picked.id;
+      } else if (
+        str(slots, "resource_id", "resource_slug", "resource") ||
+        str(slots, "resource_preference") === "specific"
+      ) {
+        return fail(
+          command,
+          "SHAPE_DISABLED",
+          "resources shape is not enabled for this bot"
+        );
       }
       const session = await getOrCreateSession({
         team_id,
@@ -930,6 +1370,7 @@ export async function executeBookingCommand(
           catalog_item_id: svc.item.id,
           starts_at: new Date(startsAt).toISOString(),
           timezone,
+          resource_id: resourceId,
         });
         await audit({
           command,
@@ -939,6 +1380,7 @@ export async function executeBookingCommand(
             status: booking.status,
             starts_at: booking.starts_at,
             catalog_item_id: booking.catalog_item_id,
+            resource_id: booking.resource_id ?? null,
           },
         });
         notifyCustomer("created", {
@@ -955,6 +1397,7 @@ export async function executeBookingCommand(
             starts_at: booking.starts_at,
             timezone: booking.timezone,
             catalog_item_id: booking.catalog_item_id,
+            resource_id: booking.resource_id ?? null,
           },
         });
       } catch (err) {
@@ -1103,6 +1546,57 @@ export async function executeBookingCommand(
       conversation_id: body.conversation_id ?? null,
       timezone,
     });
+    const rescheduleSettings = await getBotBookingSettings({ team_id, bot_id });
+    let rescheduleResourceId: string | null = existing.resource_id ?? null;
+    if (botHasShape(rescheduleSettings.shapes, "resources")) {
+      const eligible = await listEligibleResources({
+        team_id,
+        bot_id,
+        catalog_item_id: svc.item.id,
+        active_only: true,
+      });
+      if (eligible.length === 0) {
+        return fail(
+          command,
+          "NO_ELIGIBLE_RESOURCES",
+          "No resources are linked to this service"
+        );
+      }
+      const resolved = await resolveResourceFromSlots({
+        team_id,
+        bot_id,
+        slots,
+        eligible,
+      });
+      if ("error" in resolved) return { ...resolved.error, command };
+      if (resolved.resource) {
+        rescheduleResourceId = resolved.resource.id;
+      } else if (!rescheduleResourceId) {
+        // Prefer keeping previous resource; else assign first free at new time.
+        for (const r of eligible) {
+          const occupied = await listOccupiedIntervals({
+            team_id,
+            bot_id,
+            resource_id: r.id,
+          });
+          if (
+            isResourceFreeAt({
+              starts_at: newStart,
+              durationMinutes: svc.item.duration_minutes,
+              bufferBeforeMinutes: svc.item.buffer_before_minutes ?? 0,
+              bufferAfterMinutes: svc.item.buffer_after_minutes ?? 0,
+              occupied,
+            })
+          ) {
+            rescheduleResourceId = r.id;
+            break;
+          }
+        }
+      }
+      if (!rescheduleResourceId) {
+        return fail(command, "SLOT_TAKEN", "That time was just taken");
+      }
+    }
     let created;
     try {
       created = await createBooking({
@@ -1113,6 +1607,7 @@ export async function executeBookingCommand(
         catalog_item_id: svc.item.id,
         starts_at: new Date(newStart).toISOString(),
         timezone,
+        resource_id: rescheduleResourceId,
       });
     } catch (err) {
       if (err instanceof SlotConflictError) {

@@ -10,7 +10,8 @@ export type CommandCategory =
   | "booking"
   | "identity"
   | "catalog"
-  | "availability";
+  | "availability"
+  | "resources";
 
 export type CommandEntry = {
   id: string;
@@ -49,6 +50,15 @@ export const COMMAND_CATALOG: CommandEntry[] = [
     keywords: ["find", "search"],
   },
   {
+    id: "booking.get_bot_capabilities",
+    category: "booking",
+    actor: "both",
+    mutating: false,
+    summary: "Enabled shapes and resource capability for this bot.",
+    slots: [],
+    keywords: ["shapes", "modules", "capabilities"],
+  },
+  {
     id: "booking.get_availability",
     category: "booking",
     actor: "both",
@@ -60,6 +70,8 @@ export const COMMAND_CATALOG: CommandEntry[] = [
       "date_to?",
       "time_of_day?",
       "limit?",
+      "resource_id|resource_slug?",
+      "resource_preference?",
     ],
     adminHref: "/admin",
     keywords: ["slots", "times", "calendar"],
@@ -80,7 +92,13 @@ export const COMMAND_CATALOG: CommandEntry[] = [
     actor: "both",
     mutating: true,
     summary: "Create a booking at a previously offered starts_at.",
-    slots: ["service_id|service_slug*", "starts_at*", "contact_id?"],
+    slots: [
+      "service_id|service_slug*",
+      "starts_at*",
+      "contact_id?",
+      "resource_id|resource_slug?",
+      "resource_preference?",
+    ],
     adminHref: "/admin",
     keywords: ["book", "new", "on behalf"],
   },
@@ -223,6 +241,62 @@ export const COMMAND_CATALOG: CommandEntry[] = [
     keywords: ["hours", "schedule"],
   },
   {
+    id: "availability.set_settings",
+    category: "availability",
+    actor: "staff",
+    mutating: true,
+    summary: "Update bot timezone, horizon, notice, slot step, or shapes.",
+    slots: [
+      "timezone?",
+      "booking_horizon_days?",
+      "min_notice_minutes?",
+      "slot_step_minutes?",
+      "shapes?",
+    ],
+    adminHref: "/admin/resources",
+    keywords: ["shapes", "settings", "modules"],
+  },
+  {
+    id: "resources.list",
+    category: "resources",
+    actor: "both",
+    mutating: false,
+    summary: "List people/rooms (resources shape). Staff may include inactive.",
+    slots: ["include_inactive?", "service_id|service_slug?"],
+    adminHref: "/admin/resources",
+    keywords: ["clinician", "staff", "provider"],
+  },
+  {
+    id: "resources.upsert",
+    category: "resources",
+    actor: "staff",
+    mutating: true,
+    summary: "Create or update a resource (person/room).",
+    slots: ["title*", "slug?", "id?", "kind?", "sort_order?", "active?"],
+    adminHref: "/admin/resources",
+    keywords: ["clinician", "add staff"],
+  },
+  {
+    id: "resources.set_active",
+    category: "resources",
+    actor: "staff",
+    mutating: true,
+    summary: "Activate or deactivate a resource.",
+    slots: ["resource_id|slug*", "active*"],
+    adminHref: "/admin/resources",
+    keywords: ["enable", "disable"],
+  },
+  {
+    id: "resources.set_service_eligibility",
+    category: "resources",
+    actor: "staff",
+    mutating: true,
+    summary: "Set which resources may deliver a catalog service.",
+    slots: ["service_id|service_slug*", "resource_ids*"],
+    adminHref: "/admin/resources",
+    keywords: ["matrix", "eligibility", "who"],
+  },
+  {
     id: "availability.set_hours",
     category: "availability",
     actor: "staff",
@@ -287,6 +361,12 @@ export const ADMIN_NAV_SHORTCUTS: Array<{
     label: "Services",
     href: "/admin/services",
     keywords: ["catalog"],
+  },
+  {
+    id: "nav.resources",
+    label: "Resources",
+    href: "/admin/resources",
+    keywords: ["clinician", "staff", "shapes"],
   },
   {
     id: "nav.hours",

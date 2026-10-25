@@ -1,7 +1,7 @@
 # Base app + shape modules (connectability)
 
-Last updated: 2026-10-25  
-Status: **Design locked.** Base + `appointments` shipped (Phase 3b). **Next impl: `resources`.** No runtime module loader yet — add light `shapes` config with the first resources slice.  
+Last updated: 2026-10-26  
+Status: **Design locked.** Base + `appointments` shipped. **`resources` v1 shipped** (shapes config, eligibility, any/specific, one resource per booking). **Next shape: `stays`.** Multi-resource linking (staff + room together) deferred.  
 Mission: [`_mission-booking-sibling-v1.md`](./_mission-booking-sibling-v1.md)  
 Related: [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) · [`booking-command-library.md`](./booking-command-library.md) · [`identity-and-account-linking.md`](./identity-and-account-linking.md)
 

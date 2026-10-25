@@ -1,12 +1,12 @@
 # Mission: Booking sibling v1 (`chatiq-booking`)
 
-Last updated: 2026-10-25  
-Status: **Base + appointments ✅** — Phases 1–3b done (2026-10-25). **Next track: shape modules** (`resources` → `stays`). Workspace split: [`ROADMAP.md`](../../ROADMAP.md) §A base vs §B modules. Design: [`booking-command-library.md`](./booking-command-library.md) · Identity: [`identity-and-account-linking.md`](./identity-and-account-linking.md) · Catalog: [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) · Modules: [`base-and-shape-modules.md`](./base-and-shape-modules.md).  
+Last updated: 2026-10-26  
+Status: **Base + appointments ✅** · **`resources` v1 ✅** (2026-10-26). **Next: `stays`** (or ChatIQ concierge resource slots). Workspace: [`ROADMAP.md`](../../ROADMAP.md) §A vs §B. Design: [`booking-command-library.md`](./booking-command-library.md) · Identity: [`identity-and-account-linking.md`](./identity-and-account-linking.md) · Catalog: [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) · Modules: [`base-and-shape-modules.md`](./base-and-shape-modules.md).  
 Owner: Engineering
 
 ## Resume here (next session)
 
-**Base track is closed.** Workspace roadmap separates **§A Base + appointments** from **§B Shape modules**. Do this next:
+**Base track is closed.** **`resources` v1 is live** (migration applied; local smoke). Do this next:
 
 ### Track A — Base + appointments (complete)
 
@@ -18,10 +18,11 @@ Owner: Engineering
 
 **Optional A polish (does not block B):** large-catalog concierge prompts; widen allowlist; Vercel concierge flag; WS-D archive; payments.
 
-### Track B — Shape modules (default next)
+### Track B — Shape modules
 
-6. **`resources`** — **← START HERE** clinic any/specific clinician (includes per-bot `shapes` config). Spec: [`base-and-shape-modules.md`](./base-and-shape-modules.md).
-7. **`stays`** — hotel nights / inventory when a real customer needs it. Same app, not a new sibling.
+6. ~~**`resources`**~~ ✅ **v1 DONE 2026-10-26** — shapes config, eligibility, any/specific, independent calendars, `/admin/resources`, `npm run smoke:resources`. Multi-resource linking (staff+room) deferred. Spec: [`base-and-shape-modules.md`](./base-and-shape-modules.md).
+7. **`stays`** — **← START HERE** hotel nights / inventory when a real customer needs it. Same app, not a new sibling.
+8. **Optional:** ChatIQ concierge tools for `resource_id` / `resource_preference` (sibling API already accepts them).
 
 **Live pilot context (do not rediscover):**
 - LINE OA bot: `chatiq-line-guide` / `c967a5c0-b0dc-489e-b778-835b5c294588` — `booking_mode=full`, on ChatIQ `BOOKING_SIBLING_BOT_IDS` (with pilot).
@@ -208,6 +209,28 @@ Phases 1–2 complete on the pilot bot + Phase 3a identity + Phase 3b.0 catalog/
 - [x] Customer notification on admin changes via ChatIQ (2026-10-25)
 
 ## 4) Progress Log
+
+### 2026-10-26 — Resources shape v1
+
+**What changed**
+- Migration `20261026000000_resources_shape.sql`: `resources`, `service_resources`, `bookings.resource_id` (applied to Supabase `crxwmkegmrusndpocntu`).
+- Commands: `booking.get_bot_capabilities`, `availability.set_settings` (shapes), `resources.list|upsert|set_active|set_service_eligibility`; `get_availability` / `create` / `reschedule` honor any vs specific when `resources` enabled.
+- Independent calendars per resource (A booked ≠ blocks B at same start).
+- Admin `/admin/resources` (enable shape, CRUD, eligibility matrix).
+- Smoke: `npm run smoke:resources`.
+
+**Out of scope (later):** multi-resource linking (clinician + room together); ChatIQ concierge resource tool slots; `stays`.
+
+**Verified:** `npm run typecheck`; local `npm run smoke:resources` all checks passed.
+
+**Approx. toward DoD:**
+
+```text
+chatiq-booking: Base + appointments: [####################] 100%
+chatiq-booking: Shape modules (resources→stays): [##########__________] ~50% -> DoD
+```
+
+**Next:** deploy booking sibling so Vercel matches; optional concierge resource slots; or begin **`stays`**.
 
 ### 2026-10-25 — Roadmap: base vs shape modules split
 
