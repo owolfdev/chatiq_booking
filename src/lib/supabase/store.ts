@@ -783,6 +783,38 @@ export async function markBookingNoShow(input: {
   return (data as DbBooking | null) ?? null;
 }
 
+/**
+ * Hard-delete a booking (staff/admin cleanup). `booking_resources` cascade.
+ * Prefer cancel/no_show for normal ops; use this for smoke/test or erasure-adjacent cleanup.
+ */
+export async function deleteBooking(input: {
+  team_id: string;
+  bot_id: string;
+  booking_id: string;
+}): Promise<DbBooking | null> {
+  const supabase = createBookingAdminClient();
+  if (!supabase) throw new Error("Supabase not configured");
+
+  const existing = await getBookingById({
+    team_id: input.team_id,
+    bot_id: input.bot_id,
+    booking_id: input.booking_id,
+  });
+  if (!existing) return null;
+
+  const { error } = await supabase
+    .from("bookings")
+    .delete()
+    .eq("id", input.booking_id)
+    .eq("team_id", input.team_id)
+    .eq("bot_id", input.bot_id);
+
+  if (error) {
+    throw new Error(`bookings delete failed: ${error.message}`);
+  }
+  return existing;
+}
+
 export async function createBooking(input: {
   team_id: string;
   bot_id: string;

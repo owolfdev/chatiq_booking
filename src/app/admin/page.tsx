@@ -220,6 +220,41 @@ function SchedulePanel({
     await load();
   }
 
+  async function deleteSelected() {
+    if (!selected) return;
+    const label = `${formatWhen(selected.starts_at, selected.timezone)} · ${
+      selected.service_title || selected.service_slug || "service"
+    } · ${selected.contact_name || "customer"} (${selected.id.slice(0, 8)})`;
+    if (
+      !window.confirm(
+        `Permanently delete this booking?\n\n${label}\n\nThis cannot be undone. Prefer Cancel for normal ops.`
+      )
+    ) {
+      return;
+    }
+    setBusyAction(true);
+    setActionMsg(null);
+    const result = await executeAdminCommand({
+      session,
+      command: "booking.admin_delete",
+      slots: {
+        booking_id: selected.id,
+        contact_id: selected.contact_id,
+        confirmed: true,
+      },
+      timezone: selected.timezone || tz,
+    });
+    setBusyAction(false);
+    if (!result.ok) {
+      setActionMsg(result.error);
+      return;
+    }
+    setActionMsg("Deleted permanently.");
+    setSelectedId(null);
+    setRescheduleSlots([]);
+    await load();
+  }
+
   async function openCreatePanel() {
     setShowCreate(true);
     setCreateMsg(null);
@@ -799,53 +834,69 @@ function SchedulePanel({
               </p>
             ) : null}
 
-            {selected.status === "pending" || selected.status === "confirmed" ? (
-              <div
+            <div
+              style={{
+                ...adminUi.row,
+                marginTop: "1rem",
+                flexDirection: "column",
+              }}
+            >
+              {selected.status === "pending" ||
+              selected.status === "confirmed" ? (
+                <>
+                  {selected.starts_at &&
+                  new Date(selected.starts_at).getTime() > Date.now() ? (
+                    <>
+                      <button
+                        type="button"
+                        style={adminUi.button}
+                        disabled={busyAction}
+                        onClick={() => void loadRescheduleSlots()}
+                      >
+                        Offer reschedule slots
+                      </button>
+                      <button
+                        type="button"
+                        style={adminUi.buttonSecondary}
+                        disabled={busyAction}
+                        onClick={() => void cancelSelected()}
+                      >
+                        Cancel booking
+                      </button>
+                    </>
+                  ) : (
+                    <p style={{ ...adminUi.muted, margin: 0 }}>
+                      Past booking — cancel/reschedule closed; you can mark
+                      no-show.
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    style={adminUi.buttonSecondary}
+                    disabled={busyAction}
+                    onClick={() => void markNoShowSelected()}
+                  >
+                    Mark no-show
+                  </button>
+                </>
+              ) : (
+                <p style={{ ...adminUi.muted, margin: 0 }}>
+                  Inactive — cancel/no-show closed. You can still delete.
+                </p>
+              )}
+              <button
+                type="button"
                 style={{
-                  ...adminUi.row,
-                  marginTop: "1rem",
-                  flexDirection: "column",
+                  ...adminUi.buttonSecondary,
+                  borderColor: "#b00020",
+                  color: "#b00020",
                 }}
+                disabled={busyAction}
+                onClick={() => void deleteSelected()}
               >
-                {selected.starts_at &&
-                new Date(selected.starts_at).getTime() > Date.now() ? (
-                  <>
-                    <button
-                      type="button"
-                      style={adminUi.button}
-                      disabled={busyAction}
-                      onClick={() => void loadRescheduleSlots()}
-                    >
-                      Offer reschedule slots
-                    </button>
-                    <button
-                      type="button"
-                      style={adminUi.buttonSecondary}
-                      disabled={busyAction}
-                      onClick={() => void cancelSelected()}
-                    >
-                      Cancel booking
-                    </button>
-                  </>
-                ) : (
-                  <p style={{ ...adminUi.muted, margin: 0 }}>
-                    Past booking — cancel/reschedule closed; you can mark no-show.
-                  </p>
-                )}
-                <button
-                  type="button"
-                  style={adminUi.buttonSecondary}
-                  disabled={busyAction}
-                  onClick={() => void markNoShowSelected()}
-                >
-                  Mark no-show
-                </button>
-              </div>
-            ) : (
-              <p style={{ ...adminUi.muted, marginTop: "1rem" }}>
-                No mutate actions for inactive bookings.
-              </p>
-            )}
+                Delete permanently
+              </button>
+            </div>
 
             {rescheduleSlots.length > 0 ? (
               <div style={{ marginTop: "1rem" }}>

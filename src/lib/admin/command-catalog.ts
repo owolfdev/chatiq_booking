@@ -141,6 +141,17 @@ export const COMMAND_CATALOG: CommandEntry[] = [
     keywords: ["noshow", "missed"],
   },
   {
+    id: "booking.admin_delete",
+    category: "booking",
+    actor: "staff",
+    mutating: true,
+    summary:
+      "Permanently delete a booking row (staff only; prefer cancel for normal ops).",
+    slots: ["booking_id*", "confirmed*"],
+    adminHref: "/admin",
+    keywords: ["delete", "remove", "purge", "hard delete"],
+  },
+  {
     id: "booking.get_customer",
     category: "identity",
     actor: "both",

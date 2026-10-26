@@ -78,6 +78,7 @@ import {
 import {
   cancelBooking,
   createBooking,
+  deleteBooking,
   enrichContactDisplay,
   getBookingById,
   getContactById,
@@ -1705,6 +1706,59 @@ export async function executeBookingCommand(
       }
     }
 
+    // Staff: permanently delete a booking row (cleanup / smoke / erasure-adjacent).
+    if (command === "booking.admin_delete") {
+      if (!isStaff && !isSystem) {
+        return fail(command, "FORBIDDEN", "Admin actor required");
+      }
+      if (slots.confirmed !== true) {
+        return fail(
+          command,
+          "CONFIRMATION_REQUIRED",
+          "admin_delete requires slots.confirmed=true"
+        );
+      }
+      const deleteId = str(slots, "booking_id", "id");
+      if (!deleteId) {
+        return fail(command, "BOOKING_ID_REQUIRED", "booking_id is required");
+      }
+      const target = await getBookingById({
+        team_id,
+        bot_id,
+        booking_id: deleteId,
+      });
+      if (!target) {
+        return fail(command, "BOOKING_NOT_FOUND", "No matching booking");
+      }
+      const removed = await deleteBooking({
+        team_id,
+        bot_id,
+        booking_id: deleteId,
+      });
+      if (!removed) {
+        return fail(command, "DELETE_FAILED", "Booking was not deleted");
+      }
+      await audit({
+        command,
+        contact_id: target.contact_id ?? contactId,
+        before: {
+          booking_id: target.id,
+          status: target.status,
+          starts_at: target.starts_at,
+        },
+        after: { deleted: true, booking_id: target.id },
+      });
+      return ok(command, {
+        contact_id: target.contact_id ?? contactId,
+        deleted: true,
+        booking: {
+          id: target.id,
+          status: target.status,
+          starts_at: target.starts_at,
+        },
+      });
+    }
+
     // Staff: mark no-show (allowed for past appointments; frees capacity).
     if (command === "booking.mark_no_show") {
       if (!isStaff && !isSystem) {
@@ -1731,6 +1785,13 @@ export async function executeBookingCommand(
         booking_id: target.id,
         notes: `no-show via commands API (${actor.type})`,
       });
+      if (!marked || marked.status !== "no_show") {
+        return fail(
+          command,
+          "NO_SHOW_FAILED",
+          "Booking was not marked no-show (it may have already changed)"
+        );
+      }
       await audit({
         command,
         contact_id: target.contact_id ?? contactId,
@@ -1741,7 +1802,7 @@ export async function executeBookingCommand(
         },
         after: {
           booking_id: target.id,
-          status: marked?.status ?? "no_show",
+          status: marked.status,
         },
       });
       notifyCustomer("no_show", {
@@ -1752,13 +1813,11 @@ export async function executeBookingCommand(
       });
       return ok(command, {
         contact_id: contactId,
-        booking: marked
-          ? {
-              id: marked.id,
-              status: marked.status,
-              starts_at: marked.starts_at,
-            }
-          : { id: target.id, status: "no_show" },
+        booking: {
+          id: marked.id,
+          status: marked.status,
+          starts_at: marked.starts_at,
+        },
       });
     }
 
@@ -1792,6 +1851,13 @@ export async function executeBookingCommand(
         booking_id: existing.id,
         notes: `cancelled via commands API (${actor.type})`,
       });
+      if (!cancelled || cancelled.status !== "cancelled") {
+        return fail(
+          command,
+          "CANCEL_FAILED",
+          "Booking was not cancelled (it may have already changed)"
+        );
+      }
       await audit({
         command,
         contact_id: existing.contact_id ?? contactId,
@@ -1802,7 +1868,7 @@ export async function executeBookingCommand(
         },
         after: {
           booking_id: existing.id,
-          status: cancelled?.status ?? "cancelled",
+          status: cancelled.status,
         },
       });
       notifyCustomer("cancelled", {
@@ -1813,9 +1879,11 @@ export async function executeBookingCommand(
       });
       return ok(command, {
         contact_id: contactId,
-        booking: cancelled
-          ? { id: cancelled.id, status: cancelled.status, starts_at: cancelled.starts_at }
-          : { id: existing.id, status: "cancelled" },
+        booking: {
+          id: cancelled.id,
+          status: cancelled.status,
+          starts_at: cancelled.starts_at,
+        },
       });
     }
 

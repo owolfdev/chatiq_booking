@@ -95,10 +95,24 @@ export function proposeHeuristic(message: string): CopilotProposal {
     };
   }
 
-  if (/\b(cancel|void|no[- ]?show)\b/.test(lower) && !bookingId) {
+  if (
+    /\b(delete|purge|hard[- ]?delete|remove (the )?booking)\b/.test(lower) &&
+    bookingId
+  ) {
+    return {
+      kind: "command",
+      summary: `Permanently delete booking ${bookingId}.`,
+      command: "booking.admin_delete",
+      slots: { booking_id: bookingId, confirmed: true },
+      mutating: true,
+      engine: "heuristic",
+    };
+  }
+
+  if (/\b(cancel|void|no[- ]?show|delete|purge)\b/.test(lower) && !bookingId) {
     return {
       kind: "clarify",
-      summary: "Need a booking id to cancel or mark no-show.",
+      summary: "Need a booking id to cancel, mark no-show, or delete.",
       clarify_question:
         "Paste the booking id from Schedule (or open the booking and copy it).",
       engine: "heuristic",
@@ -143,7 +157,7 @@ ${catalogBrief()}
 
 Rules:
 - Return {"kind":"command","summary":"...","command":"<id>","slots":{...}} for a concrete operation.
-- Mutating booking.cancel / booking.reschedule / booking.mark_no_show / booking.admin_unmerge MUST include "confirmed": true in slots when proposing (human still confirms in UI).
+- Mutating booking.cancel / booking.reschedule / booking.mark_no_show / booking.admin_delete / booking.admin_unmerge MUST include "confirmed": true in slots when proposing (human still confirms in UI).
 - If missing required ids (booking_id, audit_id, starts_at), return {"kind":"clarify","summary":"...","clarify_question":"..."}.
 - If you cannot map safely: {"kind":"unsupported","summary":"..."}.
 - Never invent booking ids or times. Prefer clarify over guessing.
@@ -207,6 +221,7 @@ Rules:
       (entry.id === "booking.cancel" ||
         entry.id === "booking.reschedule" ||
         entry.id === "booking.mark_no_show" ||
+        entry.id === "booking.admin_delete" ||
         entry.id === "booking.admin_unmerge") &&
       slots.confirmed !== true
     ) {

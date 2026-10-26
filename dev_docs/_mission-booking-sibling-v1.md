@@ -240,6 +240,23 @@ Phases 1–2 + 3a + 3b.0 + 3b console + shape modules (`resources` / `stays` / l
 
 ## 4) Progress Log
 
+### 2026-10-27 — Staff hard-delete + schedule status filter
+
+**What changed**
+- Sibling: `booking.admin_delete` (staff, `confirmed=true`, requires `booking_id`) + `deleteBooking` store helper; audit before/after; copilot heuristic + confirm gate.
+- ChatIQ schedule: Status filter (Open / Cancelled & no-show / All); **Delete permanently**; cancel/no-show feedback earlier in session.
+- Sibling `/admin` Schedule: **Delete permanently** on any selected booking.
+
+**Verified:** typecheck/lints on edited TS (no full smoke this slice). Needs sibling deploy for delete on Vercel; ChatIQ UI works against new command once sibling is live.
+
+**Approx. toward DoD:** Track C still **~98%** (ops polish, not checklist DoD).
+
+```text
+chatiq-booking + chatiq: Operator UI (Track C): [###################_] 98% -> DoD
+```
+
+**Next:** Deploy sibling; retest cancel/delete on schedule; optional commit/push both repos; legacy dashboard archive still open.
+
 ### 2026-10-26 — Docs sync + pause (roadmap / operator-ui spec)
 
 **What changed (docs only)**

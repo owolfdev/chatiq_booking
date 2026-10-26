@@ -1,6 +1,6 @@
 # ChatIQ booking operator UI (product surface)
 
-Last updated: 2026-10-26  
+Last updated: 2026-10-27  
 Status: **Shipped (~98%).** Schedule ✅ · Settings ✅ · Legacy hide ✅ · Sibling `/admin` ops-only ✅. Remaining: delete legacy dashboard code; optional time-blocks / customers-audit.  
 Mission: [`_mission-booking-sibling-v1.md`](./_mission-booking-sibling-v1.md) · Workspace: [`ROADMAP.md`](../../ROADMAP.md) §C
 
@@ -27,7 +27,7 @@ Sibling `/admin` is **ops/pilot only** (pasted service token). Subscribers use C
 3. Or go directly:
 
 ```text
-/dashboard/bots/[slug]/booking          → schedule (list + cancel / reschedule / no-show / create)
+/dashboard/bots/[slug]/booking          → schedule (list + cancel / reschedule / no-show / create / hard-delete)
 /dashboard/bots/[slug]/booking/settings → shapes, services, hours (+ closed dates), resources, eligibility / person+room
 ```
 
@@ -39,7 +39,7 @@ Global sidebar **Bookings** is hidden when sibling runtime is on; `/dashboard/bo
 
 | Surface | Status | Purpose |
 |---------|--------|---------|
-| **Schedule** | ✅ | See customer bookings; cancel / reschedule / no-show / create-on-behalf |
+| **Schedule** | ✅ | See customer bookings; cancel / reschedule / no-show / create-on-behalf / hard-delete (`booking.admin_delete`; prefer cancel for normal ops) |
 | **Booking settings** | ✅ | Shapes, services, hours (+ closed dates), resources + eligibility + person+room |
 | **booking_mode** (bot Settings form) | Separate | Chat gate only — not the operator catalog UI |
 | **Customers / audit** | Later | Linked identities; who changed what (still sibling `/admin` for now) |
