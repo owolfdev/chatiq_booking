@@ -1,26 +1,39 @@
 # Mission: Booking sibling v1 (`chatiq-booking`)
 
-Last updated: 2026-10-26  
-Status: **Engine ✅** · **Track C operator UI ~98% ✅** (ChatIQ schedule + settings; legacy Bookings hidden; `/admin` ops-only). Optional: archive legacy dashboard code; time blocks / customers in ChatIQ. Workspace: [`ROADMAP.md`](../../ROADMAP.md) §C. Spec: [`chatiq-booking-operator-ui.md`](./chatiq-booking-operator-ui.md). Design: [`booking-command-library.md`](./booking-command-library.md) · Identity: [`identity-and-account-linking.md`](./identity-and-account-linking.md) · Catalog: [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) · Modules: [`base-and-shape-modules.md`](./base-and-shape-modules.md).  
+Last updated: 2026-10-27
+
+Status: **Engine ✅** · **Track C operator UI ~98% implemented; production pilot verification next**. ChatIQ schedule/settings and Booking links are pushed; legacy Bookings is hidden; sibling `/admin` is ops-only. Optional after verification: archive legacy dashboard code; time blocks / customers in ChatIQ. Workspace: [`ROADMAP.md`](../../ROADMAP.md) §C. Spec: [`chatiq-booking-operator-ui.md`](./chatiq-booking-operator-ui.md). Design: [`booking-command-library.md`](./booking-command-library.md) · Identity: [`identity-and-account-linking.md`](./identity-and-account-linking.md) · Catalog: [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) · Modules: [`base-and-shape-modules.md`](./base-and-shape-modules.md).
+
 Owner: Engineering
 
 ## Resume here (next session)
 
-**Paused 2026-10-26 evening.** Track C ~98% — ChatIQ operator UI is live.
+**Next action (2026-10-27): production pilot verification.** Track C is ~98% implemented. The original operator UI shipped earlier; the October 27 hard-delete fix, progress feedback, saved view choices, and Booking navigation are pushed but have not been verified on deployed builds.
 
-**How to open it:** My Bots → bot → **Booking** (not the booking_mode dropdown in bot Settings).  
+**How to open it:** My Bots → **Booking** on a `booking_mode=full` bot; links also appear in bot Settings, bot preview, and `/chat/[slug]` when sibling runtime is configured. The booking mode dropdown controls chat routing.
+
 - Schedule: `/dashboard/bots/[slug]/booking`  
 - Setup: `/dashboard/bots/[slug]/booking/settings`  
-Needs `BOOKING_RUNTIME=sibling` + URL + token on that deploy.
+
+Needs `BOOKING_RUNTIME=sibling` + URL + token on that ChatIQ deploy. Authorized team members can open the direct operator route to configure a bot before chat booking is set to `full`.
+
+**Pushed revisions:** `chatiq-booking` `7b68459` (verified-row hard delete); `chatiq` `f40ede42` (schedule progress and saved filters) and `62ea7790` (Booking links). Local `npm run smoke:commands` passed against pilot Supabase after the delete fix, including a second delete returning `BOOKING_NOT_FOUND`; typecheck passed in both repos. Production deployment revisions and browser behavior are still unverified.
+
+**Pilot checklist, in order:**
+
+1. Confirm the deployed sibling includes `7b68459` and deployed ChatIQ includes `62ea7790`.
+2. Use disposable pilot records to test single delete of an open booking, single delete of a cancelled booking, and bulk delete of two bookings. Refresh the schedule and confirm every deleted ID is absent from sibling Supabase. Confirm failure feedback leaves rows visible if a command fails.
+3. Check operation progress for delete, cancel, no-show, reschedule, and create. Reload and revisit to confirm Status, When, Sort, and create-form Service restore for the same user/bot; another bot keeps its own choices. Row checkboxes should reset.
+4. Check Booking links in My Bots, bot Settings, bot preview, and `/chat/[slug]`: present for full bots when sibling runtime is configured, hidden for off/intent-only bots. Record results below before declaring the pilot check done.
 
 ### Track C — ChatIQ operator UI — mostly done
 
 9. ~~**Per-bot booking settings in ChatIQ**~~ ✅ **v1+ DONE 2026-10-26** — shapes, services, hours (+ closed dates), resources CRUD, eligibility + person+room linking. Blocks / custom exception windows still sibling `/admin` if needed.  
-10. ~~**Per-bot schedule in ChatIQ**~~ ✅ **DONE 2026-10-26** — list + cancel / reschedule / no-show / create-on-behalf. Staff API: `/api/booking/staff/*`.  
+10. ~~**Per-bot schedule in ChatIQ**~~ ✅ **DONE 2026-10-26** — list + cancel / reschedule / no-show / create-on-behalf; October 27 hard-delete, status filter, progress feedback, and per-user/bot view preferences. Staff API: `/api/booking/staff/*`.
 11. ~~**Hide legacy `/dashboard/bookings`**~~ ✅ **DONE 2026-10-26** — sidebar hidden when sibling runtime; soft landing on all `/dashboard/bookings/*`; dashboard snapshot points at My Bots. Delete/archive of legacy code still later.  
 12. ~~**Demote sibling `/admin`**~~ ✅ **DONE 2026-10-26** — docs frame `/admin` as ops/pilot only; ChatIQ is the product surface.
 
-**Optional next session:** smoke the ChatIQ Booking UI on a pilot bot; archive legacy `/dashboard/bookings` code; time blocks in ChatIQ; payments / large-catalog prompts. Or pick Watch / core chat from [`ROADMAP.md`](../../ROADMAP.md).
+**After pilot verification:** archive legacy `/dashboard/bookings` code when safe; optional time blocks in ChatIQ, payments, large-catalog prompts. Or pick Watch / core chat from [`ROADMAP.md`](../../ROADMAP.md).
 
 ### Track A — Base + appointments (complete)
 
@@ -99,7 +112,7 @@ Done when **every command can be executed and verified via direct API calls with
 - [x] `POST /api/v1/commands/execute` returns structured data (no customer-facing prose) for: `list_services`, `get_existing`, `get_availability`, `create`, `cancel`, `reschedule`
 - [x] `get_availability` filters by service + date window + optional time-of-day; returns ≤ 5 slots, all future, none taken
 - [x] Mutations validate server-side: slot still open, booking exists & upcoming, cancel/reschedule require `confirmed=true`
-- [x] API exit tests pass: `npm run smoke:commands` 20/20 locally (create→lookup→reschedule→cancel; double-book rejected; confirmation gate; past create rejected; past/evening windows empty-not-error). Deployed re-run pending push.
+- [x] API exit tests pass: original `npm run smoke:commands` 20/20 locally and deployed (2026-10-21); October 27 local run includes hard-delete and confirms a second delete returns `BOOKING_NOT_FOUND`. Deployed re-run of the October 27 change remains pending.
 
 ### Phase 2 — LLM concierge (`chatiq`)
 
@@ -156,10 +169,13 @@ Spec: [`chatiq-booking-operator-ui.md`](./chatiq-booking-operator-ui.md). Done w
 - [x] Per-bot **settings** in ChatIQ (shapes, services, hours + closed dates, resources, eligibility / person+room) — 2026-10-26
 - [x] Legacy `/dashboard/bookings` hidden + soft landing when sibling runtime — 2026-10-26 (code delete/archive later)
 - [x] Sibling `/admin` demoted to ops-only in docs — 2026-10-26
+- [x] Booking links on gallery, bot Settings, preview, and internal test page for full bots when sibling runtime is configured — 2026-10-27
+- [x] Schedule progress feedback, Status/When/Sort filters, and per-user/bot saved view choices — 2026-10-27
+- [ ] Production pilot verification of October 27 deployed revisions, hard-delete against Supabase, UI progress/preferences, and conditional links (see Resume here)
 
 ### Overall v1 DoD
 
-Phases 1–2 + 3a + 3b.0 + 3b console + shape modules (`resources` / `stays` / linking) ✅ on the engine. **Remaining for GTM product surface:** Track C (ChatIQ operator UI). Legacy in-`chatiq` booking docs archived (2026-10-21); legacy dashboard code still present until Track C hides/deletes it.
+Phases 1–2 + 3a + 3b.0 + 3b console + shape modules (`resources` / `stays` / linking) ✅ on the engine. Track C operator UI implementation is ~98%; **remaining launch proof is the production pilot checklist above**. Legacy in-`chatiq` booking docs were archived (2026-10-21); legacy dashboard code is hidden and remains for later archive.
 
 ## 3) Workstreams
 
@@ -239,6 +255,21 @@ Phases 1–2 + 3a + 3b.0 + 3b console + shape modules (`resources` / `stays` / l
 - [x] Customer notification on admin changes via ChatIQ (2026-10-25)
 
 ## 4) Progress Log
+
+### 2026-10-27 — Handoff sync after pushed operator UI fixes
+
+**Changed (docs only):** Updated mission Resume/DoD, operator UI spec, project docs/agent handoff, ChatIQ focus, and workspace roadmap/agent notes to distinguish pushed implementation from unverified production behavior. The next action is the deployed pilot checklist above; legacy dashboard archive and optional features follow it.
+
+**Verified:** Git `main` was clean and matched `origin/main` in both repos at the start of this documentation pass; prior local `smoke:commands` hard-delete check and both typechecks are recorded in the entries below. No new production/browser verification in this docs pass.
+
+**Approx. toward DoD:** Track C **~98%**, no change from documentation.
+
+```text
+chatiq:         Operator UI (Track C): [###################_] ~98% -> DoD
+chatiq-booking: engine / command support: [####################] ~100% -> implementation DoD
+```
+
+**Next:** Confirm deployed revisions, run the disposable pilot delete/UI/navigation checklist in Resume here, and log each result. Then decide whether to archive the legacy dashboard code or move to Watch Phase B.
 
 ### 2026-10-27 — Booking navigation from bot surfaces
 

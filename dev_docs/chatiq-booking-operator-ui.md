@@ -1,7 +1,8 @@
 # ChatIQ booking operator UI (product surface)
 
 Last updated: 2026-10-27  
-Status: **Shipped (~98%).** Schedule ✅ · Settings ✅ · Legacy hide ✅ · Sibling `/admin` ops-only ✅. Remaining: delete legacy dashboard code; optional time-blocks / customers-audit.  
+Status: **~98% implemented; production pilot verification next.** Schedule ✅ · Settings ✅ · conditional Booking links ✅ · Legacy hide ✅ · Sibling `/admin` ops-only ✅. October 27 changes are pushed, but their deployed browser behavior has not been verified. Later: archive legacy dashboard code; optional time blocks / customers-audit.
+
 Mission: [`_mission-booking-sibling-v1.md`](./_mission-booking-sibling-v1.md) · Workspace: [`ROADMAP.md`](../../ROADMAP.md) §C
 
 ## 1) Verdict
@@ -22,8 +23,8 @@ Sibling `/admin` is **ops/pilot only** (pasted service token). Subscribers use C
 
 **Not** the booking mode dropdown in bot Settings (`off` / `intent_only` / `full`) — that only gates chat.
 
-1. **My Bots** → click **Booking** on a booking-enabled bot, or open the bot and click **Booking** next to Settings.
-2. The bot Settings page and internal chat test page also link to **Booking** when sibling booking is configured and `booking_mode=full`.
+1. **My Bots** → click **Booking** on a bot card, or open the bot preview and click **Booking** next to Settings.
+2. Bot Settings and the internal `/chat/[slug]` test page also link to **Booking**. These links appear when sibling booking is configured and that bot has `booking_mode=full`.
 3. Or go directly:
 
 ```text
@@ -33,13 +34,15 @@ Sibling `/admin` is **ops/pilot only** (pasted service token). Subscribers use C
 
 Requires `BOOKING_RUNTIME=sibling` + `BOOKING_SIBLING_URL` + `BOOKING_SIBLING_TOKEN` on that ChatIQ deploy. Set bot **booking_mode=full** when chat booking should be live.
 
+The links use `booking_mode=full` as the discoverability gate. The direct operator URLs remain accessible to an authorized team member when sibling runtime is configured, so an owner can prepare catalog and hours before turning on chat booking.
+
 Global sidebar **Bookings** is hidden when sibling runtime is on; `/dashboard/bookings` soft-lands to My Bots.
 
 ## 4) Product surfaces in ChatIQ (per bot)
 
 | Surface | Status | Purpose |
 |---------|--------|---------|
-| **Schedule** | ✅ | See customer bookings; cancel / reschedule / no-show / create-on-behalf / hard-delete (`booking.admin_delete`; prefer cancel for normal ops) |
+| **Schedule** | ✅ | See customer bookings; filter by status/time, sort, cancel / reschedule / no-show / create-on-behalf / hard-delete (`booking.admin_delete`; prefer cancel for normal ops). Progress banner stays visible through refresh; Status, When, Sort, and create-form Service are saved per user/bot in browser storage. Row selection resets on revisit. |
 | **Booking settings** | ✅ | Shapes, services, hours (+ closed dates), resources + eligibility + person+room |
 | **booking_mode** (bot Settings form) | Separate | Chat gate only — not the operator catalog UI |
 | **Customers / audit** | Later | Linked identities; who changed what (still sibling `/admin` for now) |
@@ -78,5 +81,13 @@ Do **not** wire legacy UI to the sibling as a shortcut — replace it (done for 
 - [x] A team admin can set up catalog/hours/resources and manage the schedule in ChatIQ without pasting a sibling service token.  
 - [x] Legacy Bookings nav is hidden when sibling runtime is on; deep links soft-land.  
 - [x] Sibling remains the only place booking rules and persistence live.  
+- [x] Local pilot Supabase smoke confirms staff hard-delete removes a row and a second delete returns `BOOKING_NOT_FOUND` (2026-10-27).
+- [ ] On deployed builds, verify single/bulk delete removes disposable pilot IDs from Supabase; confirm operation feedback, saved choices, and conditional links in a browser.
 - [ ] Legacy `/dashboard/bookings` code deleted/archived.  
 - [ ] Optional: customers/audit + time blocks in ChatIQ (today: sibling `/admin`).
+
+## 9) Release check for October 27 changes
+
+Pushed commits: `chatiq-booking` `7b68459` (hard-delete verification), `chatiq` `f40ede42` (schedule feedback/preferences) and `62ea7790` (Booking links). Local `smoke:commands` and typechecks passed. Confirm the deployed revisions first; a push alone does not prove a deployment finished.
+
+On a pilot bot, delete a disposable open booking, a disposable cancelled booking, and two selected bookings. Refresh and confirm all deleted IDs are absent from the sibling Supabase `bookings` table. Check the progress banner during actions and failure messages if a request fails. Reload to confirm Status, When, Sort, and Service choices restore for that user/bot, while row checkboxes reset; another bot should keep separate choices. Finally verify the four Booking entry points on a full bot and their absence on off/intent-only bots. Record results in the mission Progress Log.

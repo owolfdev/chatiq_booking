@@ -2,7 +2,7 @@
 
 Isolated booking **engine** for ChatIQ. Core chat stays safe: ChatIQ calls this app over HTTPS only when a bot is gated on and the sibling runtime is enabled.
 
-**Operators:** configure schedule and settings in **ChatIQ** (`/dashboard/bots/[slug]/booking`). Sibling `/admin` is **ops/pilot only** (service token) — not the subscriber product surface. Spec: [`dev_docs/chatiq-booking-operator-ui.md`](./dev_docs/chatiq-booking-operator-ui.md).
+**Operators:** configure schedule and settings in **ChatIQ** (`/dashboard/bots/[slug]/booking`). Booking links appear in My Bots, bot Settings/preview, and internal chat test for full booking bots. Sibling `/admin` is **ops/pilot only** (service token). **Current next action:** verify the October 27 pushed changes on deployed pilot builds, especially hard-delete against Supabase. Resume checklist: [`dev_docs/_mission-booking-sibling-v1.md`](./dev_docs/_mission-booking-sibling-v1.md). Spec: [`dev_docs/chatiq-booking-operator-ui.md`](./dev_docs/chatiq-booking-operator-ui.md).
 
 ## Local
 
@@ -13,7 +13,7 @@ npm run dev   # http://localhost:3003
 ```
 
 - Health: `GET /api/health`
-- Turn stub: `POST /api/v1/turns/handle` with `Authorization: Bearer <BOOKING_SERVICE_TOKEN>`
+- Commands API: `POST /api/v1/commands/execute` with `Authorization: Bearer <BOOKING_SERVICE_TOKEN>`; the turn endpoint remains for deterministic fallback.
 
 ## Docs
 
@@ -29,7 +29,7 @@ npm run dev   # http://localhost:3003
 
 ## ChatIQ adapter (chat path wired)
 
-Pilot is live: ChatIQ points at the deployed sibling with one allowlisted bot, and create/lookup/cancel/reschedule are chat-smoked. **Design locked (2026-10-21): LLM concierge drives the deterministic sibling via typed commands** — see [`dev_docs/booking-command-library.md`](./dev_docs/booking-command-library.md). Next steps: [`dev_docs/_mission-booking-sibling-v1.md`](./dev_docs/_mission-booking-sibling-v1.md) (**Resume here**).
+Pilot foundation is live: ChatIQ points at the sibling for allowlisted bots, and create/lookup/cancel/reschedule were chat-smoked. **Design locked (2026-10-21): LLM concierge drives the deterministic sibling via typed commands** — see [`dev_docs/booking-command-library.md`](./dev_docs/booking-command-library.md). The October 27 hard-delete/UI changes still need deployed pilot verification: [`dev_docs/_mission-booking-sibling-v1.md`](./dev_docs/_mission-booking-sibling-v1.md) (**Resume here**).
 
 In `chatiq` `.env.local` (or Vercel):
 
@@ -44,7 +44,7 @@ BOOKING_SIBLING_BOT_IDS=<pilot-bot-uuid>
 
 Pilot bot: set **Booking** to `full` in bot settings. Restart `chatiq` after env changes.
 
-Any non-welcome message to that bot calls the sibling; legacy booking engine is skipped for that bot. If the sibling errors/times out, ChatIQ fails closed to core chat (no legacy fallback).
+Booking intent for an allowlisted `booking_mode=full` bot routes through the sibling; general chat stays on the normal bot path. If the sibling errors or times out, ChatIQ fails closed to core chat (no legacy fallback).
 
 ## Persistence
 
