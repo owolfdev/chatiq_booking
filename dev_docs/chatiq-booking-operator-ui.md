@@ -22,8 +22,8 @@ Sibling `/admin` is **ops/pilot only** (pasted service token). Subscribers use C
 
 **Not** the booking mode dropdown in bot Settings (`off` / `intent_only` / `full`) — that only gates chat.
 
-1. **My Bots** → open the bot  
-2. Click **Booking** (next to Settings)  
+1. **My Bots** → click **Booking** on a booking-enabled bot, or open the bot and click **Booking** next to Settings.
+2. The bot Settings page and internal chat test page also link to **Booking** when sibling booking is configured and `booking_mode=full`.
 3. Or go directly:
 
 ```text

@@ -240,6 +240,20 @@ Phases 1–2 + 3a + 3b.0 + 3b console + shape modules (`resources` / `stays` / l
 
 ## 4) Progress Log
 
+### 2026-10-27 — Booking navigation from bot surfaces
+
+**Changed:** ChatIQ now shows a Booking link on My Bots gallery cards, bot Settings, bot preview, and internal `/chat/[slug]` test page for bots with `booking_mode=full` when the sibling runtime is configured. The gallery query now includes `booking_mode`. The operator UI spec lists these entry points.
+
+**Verified:** `npm run typecheck` in `chatiq`; targeted ESLint (0 errors, 2 pre-existing warnings); `git diff --check`. Browser navigation smoke remains pending.
+
+**Approx. toward DoD:** Track C **~98%**, unchanged (discoverability polish).
+
+```text
+chatiq: Operator UI (Track C): [###################_] ~98% -> DoD
+```
+
+**Next:** On a deployed build, verify links appear for a full booking bot and stay hidden for off/intent-only bots across gallery, Settings, preview, and internal chat. Continue the pending production delete check.
+
 ### 2026-10-27 — Persist ChatIQ schedule view preferences
 
 **Changed:** ChatIQ `/dashboard/bots/[slug]/booking` now restores Status, When, Sort, and create-form Service from browser storage scoped to the signed-in user and bot. Stored values are validated; unavailable storage falls back to defaults. Booking row selections remain session-only so bulk actions do not carry over to a later visit.
