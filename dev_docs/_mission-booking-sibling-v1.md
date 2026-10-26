@@ -10,12 +10,12 @@ Owner: Engineering
 
 ### Track C — ChatIQ operator UI — mostly done
 
-9. ~~**Per-bot booking settings in ChatIQ**~~ ✅ **v1 DONE 2026-10-26** — shapes, services, hours, resources CRUD. Eligibility / person+room linking / exceptions+blocks still sibling `/admin` for now.  
+9. ~~**Per-bot booking settings in ChatIQ**~~ ✅ **v1+ DONE 2026-10-26** — shapes, services, hours (+ closed dates), resources CRUD, eligibility + person+room linking. Blocks / custom exception windows still sibling `/admin` if needed.  
 10. ~~**Per-bot schedule in ChatIQ**~~ ✅ **DONE 2026-10-26** — list + cancel / reschedule / no-show / create-on-behalf. Staff API: `/api/booking/staff/*`.  
 11. ~~**Hide legacy `/dashboard/bookings`**~~ ✅ **DONE 2026-10-26** — sidebar hidden when sibling runtime; soft landing on all `/dashboard/bookings/*`; dashboard snapshot points at My Bots. Delete/archive of legacy code still later.  
 12. ~~**Demote sibling `/admin`**~~ ✅ **DONE 2026-10-26** — docs frame `/admin` as ops/pilot only; ChatIQ is the product surface.
 
-**Optional next:** port eligibility / exceptions into ChatIQ settings; archive legacy dashboard code; payments / large-catalog prompts.
+**Optional next:** archive legacy `/dashboard/bookings` code; time blocks / custom exception windows in ChatIQ; payments / large-catalog prompts.
 
 ### Track A — Base + appointments (complete)
 
@@ -148,7 +148,7 @@ Spec: [`chatiq-booking-operator-ui.md`](./chatiq-booking-operator-ui.md). Done w
 
 - [x] ChatIQ server helper: staff-scoped sibling `commands/execute` for bots the user can manage (token never in browser) — 2026-10-26
 - [x] Per-bot **schedule** in ChatIQ (list + cancel / reschedule / no-show / create-on-behalf) — 2026-10-26
-- [x] Per-bot **settings** in ChatIQ (shapes, services, hours, resources CRUD) — 2026-10-26; eligibility/exceptions still sibling admin
+- [x] Per-bot **settings** in ChatIQ (shapes, services, hours + closed dates, resources, eligibility / person+room) — 2026-10-26
 - [x] Legacy `/dashboard/bookings` hidden + soft landing when sibling runtime — 2026-10-26 (code delete/archive later)
 - [x] Sibling `/admin` demoted to ops-only in docs — 2026-10-26
 
@@ -235,6 +235,20 @@ Phases 1–2 + 3a + 3b.0 + 3b console + shape modules (`resources` / `stays` / l
 
 ## 4) Progress Log
 
+### 2026-10-26 — Track C slice 5: eligibility + closed dates in ChatIQ settings
+
+**What changed**
+- Settings → Resources: service eligibility checkboxes + person+room require toggle.
+- Settings → Hours: add/list closed-date exceptions.
+
+**Approx. toward DoD:** Track C **~98%**.
+
+```text
+chatiq: Operator UI (Track C): [###################_] 98% -> DoD
+```
+
+**Next:** archive legacy dashboard code when ready; optional time-block UI.
+
 ### 2026-10-26 — Track C slice 4: hide legacy Bookings + demote sibling `/admin`
 
 **What changed**
@@ -245,11 +259,7 @@ Phases 1–2 + 3a + 3b.0 + 3b console + shape modules (`resources` / `stays` / l
 
 **Verified:** lint on edited layout/sidebar/env.
 
-**Approx. toward DoD:** Track C **~95%** (optional: eligibility/exceptions in ChatIQ; delete legacy dashboard code).
-
-```text
-chatiq: Operator UI (Track C): [###################_] 95% -> DoD
-```
+**Approx. toward DoD:** Track C **~95%** (superseded by slice 5).
 
 **Next:** optional eligibility / exceptions / person+room linking UI in ChatIQ settings; later archive legacy `/dashboard/bookings` code.
 
