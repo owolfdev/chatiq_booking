@@ -1282,6 +1282,60 @@ export async function executeBookingCommand(
     // All remaining commands need a contact.
     // Scope: customers may only act as their claim-resolved identity.
     // Staff/system may pass slots.contact_id for any team contact.
+    // A staff delete identifies the booking itself; it must not require a
+    // customer identity or create a contact as a side effect.
+    if (command === "booking.admin_delete") {
+      if (!isStaff && !isSystem) {
+        return fail(command, "FORBIDDEN", "Admin actor required");
+      }
+      if (slots.confirmed !== true) {
+        return fail(
+          command,
+          "CONFIRMATION_REQUIRED",
+          "admin_delete requires slots.confirmed=true"
+        );
+      }
+      const deleteId = str(slots, "booking_id", "id");
+      if (!deleteId) {
+        return fail(command, "BOOKING_ID_REQUIRED", "booking_id is required");
+      }
+      const target = await getBookingById({
+        team_id,
+        bot_id,
+        booking_id: deleteId,
+      });
+      if (!target) {
+        return fail(command, "BOOKING_NOT_FOUND", "No matching booking");
+      }
+      const removed = await deleteBooking({
+        team_id,
+        bot_id,
+        booking_id: deleteId,
+      });
+      if (!removed) {
+        return fail(command, "DELETE_FAILED", "Booking was not deleted");
+      }
+      await audit({
+        command,
+        contact_id: target.contact_id,
+        before: {
+          booking_id: target.id,
+          status: target.status,
+          starts_at: target.starts_at,
+        },
+        after: { deleted: true, booking_id: target.id },
+      });
+      return ok(command, {
+        contact_id: target.contact_id,
+        deleted: true,
+        booking: {
+          id: target.id,
+          status: target.status,
+          starts_at: target.starts_at,
+        },
+      });
+    }
+
     const slotContactId = str(slots, "contact_id");
     const claims = body.identity_claims ?? [];
     const hasClaimsOrConversation =
@@ -1704,59 +1758,6 @@ export async function executeBookingCommand(
         }
         throw err;
       }
-    }
-
-    // Staff: permanently delete a booking row (cleanup / smoke / erasure-adjacent).
-    if (command === "booking.admin_delete") {
-      if (!isStaff && !isSystem) {
-        return fail(command, "FORBIDDEN", "Admin actor required");
-      }
-      if (slots.confirmed !== true) {
-        return fail(
-          command,
-          "CONFIRMATION_REQUIRED",
-          "admin_delete requires slots.confirmed=true"
-        );
-      }
-      const deleteId = str(slots, "booking_id", "id");
-      if (!deleteId) {
-        return fail(command, "BOOKING_ID_REQUIRED", "booking_id is required");
-      }
-      const target = await getBookingById({
-        team_id,
-        bot_id,
-        booking_id: deleteId,
-      });
-      if (!target) {
-        return fail(command, "BOOKING_NOT_FOUND", "No matching booking");
-      }
-      const removed = await deleteBooking({
-        team_id,
-        bot_id,
-        booking_id: deleteId,
-      });
-      if (!removed) {
-        return fail(command, "DELETE_FAILED", "Booking was not deleted");
-      }
-      await audit({
-        command,
-        contact_id: target.contact_id ?? contactId,
-        before: {
-          booking_id: target.id,
-          status: target.status,
-          starts_at: target.starts_at,
-        },
-        after: { deleted: true, booking_id: target.id },
-      });
-      return ok(command, {
-        contact_id: target.contact_id ?? contactId,
-        deleted: true,
-        booking: {
-          id: target.id,
-          status: target.status,
-          starts_at: target.starts_at,
-        },
-      });
     }
 
     // Staff: mark no-show (allowed for past appointments; frees capacity).

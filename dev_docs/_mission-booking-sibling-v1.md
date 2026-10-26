@@ -240,6 +240,34 @@ Phases 1–2 + 3a + 3b.0 + 3b console + shape modules (`resources` / `stays` / l
 
 ## 4) Progress Log
 
+### 2026-10-27 — Persist ChatIQ schedule view preferences
+
+**Changed:** ChatIQ `/dashboard/bots/[slug]/booking` now restores Status, When, Sort, and create-form Service from browser storage scoped to the signed-in user and bot. Stored values are validated; unavailable storage falls back to defaults. Booking row selections remain session-only so bulk actions do not carry over to a later visit.
+
+**Verified:** `npm run typecheck` and targeted ESLint in `chatiq`; `git diff --check`. No browser or production smoke for this preference-only slice.
+
+**Approx. toward DoD:** Track C **~98%**, unchanged (operator convenience polish).
+
+```text
+chatiq: Operator UI (Track C): [###################_] ~98% -> DoD
+```
+
+**Next:** After deploying ChatIQ, change the four dropdowns on a pilot bot, reload and revisit the page to confirm they restore; verify a different bot keeps its own choices. Continue the pending production delete check from the prior entry.
+
+### 2026-10-27 — Verify staff hard-delete and show schedule progress
+
+**Changed:** `booking.admin_delete` now runs before customer identity resolution, while retaining staff and confirmation checks. Supabase delete verifies one row was removed and a follow-up read finds no booking. ChatIQ schedule waits for a fresh list after deletion and shows an operation spinner/progress message for staff actions; network failures become visible errors. The bookings-list adapter typing was corrected so ChatIQ typecheck passes.
+
+**Verified:** `npm run typecheck` in both repos; targeted ChatIQ ESLint; `node --check scripts/smoke-commands.mjs`; local `npm run smoke:commands` against the pilot Supabase project **PASS**, including delete of a cancelled booking followed by `BOOKING_NOT_FOUND` on a second delete. No production UI smoke or deployment in this session.
+
+**Approx. toward DoD:** Track C **~98%**, unchanged (delete reliability and operator feedback polish).
+
+```text
+chatiq-booking + chatiq: Operator UI (Track C): [###################_] ~98% -> DoD
+```
+
+**Next:** Commit/push and deploy the sibling, then deploy ChatIQ; verify a single and bulk delete through `/dashboard/bots/[slug]/booking` and confirm removed IDs are absent from Supabase. Archive legacy dashboard code later.
+
 ### 2026-10-27 — Staff hard-delete + schedule status filter
 
 **What changed**

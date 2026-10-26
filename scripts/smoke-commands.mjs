@@ -206,12 +206,32 @@ try {
 
   const cancelled = await exec("booking.cancel", { booking_id: createdId, confirmed: true });
   check("cancel (confirmed) ok", cancelled.json.ok === true, JSON.stringify(cancelled.json));
+  const cancelledId = createdId;
   createdId = null;
 
   const afterCancel = await exec("booking.get_existing");
   check(
     "get_existing empty after cancel",
     afterCancel.json.ok && afterCancel.json.data?.booking === null
+  );
+
+  const deleted = await execAdmin("booking.admin_delete", {
+    booking_id: cancelledId,
+    confirmed: true,
+  });
+  check(
+    "admin delete removes cancelled booking",
+    deleted.json.ok === true && deleted.json.data?.deleted === true,
+    JSON.stringify(deleted.json)
+  );
+  const deletedAgain = await execAdmin("booking.admin_delete", {
+    booking_id: cancelledId,
+    confirmed: true,
+  });
+  check(
+    "deleted booking is absent from database",
+    deletedAgain.json.ok === false && deletedAgain.json.code === "BOOKING_NOT_FOUND",
+    JSON.stringify(deletedAgain.json)
   );
 
   // Phase 3b — actor scope: customer cannot act as another contact_id.

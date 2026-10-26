@@ -802,15 +802,23 @@ export async function deleteBooking(input: {
   });
   if (!existing) return null;
 
-  const { error } = await supabase
+  const { data: deleted, error } = await supabase
     .from("bookings")
     .delete()
     .eq("id", input.booking_id)
     .eq("team_id", input.team_id)
-    .eq("bot_id", input.bot_id);
+    .eq("bot_id", input.bot_id)
+    .select("id");
 
   if (error) {
     throw new Error(`bookings delete failed: ${error.message}`);
+  }
+  if (deleted?.length !== 1 || deleted[0]?.id !== input.booking_id) {
+    throw new Error("bookings delete failed: no row was removed");
+  }
+  const stillPresent = await getBookingById(input);
+  if (stillPresent) {
+    throw new Error("bookings delete failed: row is still present");
   }
   return existing;
 }
