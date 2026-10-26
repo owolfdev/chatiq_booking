@@ -1,12 +1,17 @@
 # Mission: Booking sibling v1 (`chatiq-booking`)
 
 Last updated: 2026-10-26  
-Status: **Engine ✅** (base + appointments + resources + stays + person+room linking). **Next: ChatIQ operator UI** (settings + schedule in ChatIQ; hide legacy `/dashboard/bookings`). Workspace: [`ROADMAP.md`](../../ROADMAP.md) §C. Spec: [`chatiq-booking-operator-ui.md`](./chatiq-booking-operator-ui.md). Design: [`booking-command-library.md`](./booking-command-library.md) · Identity: [`identity-and-account-linking.md`](./identity-and-account-linking.md) · Catalog: [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) · Modules: [`base-and-shape-modules.md`](./base-and-shape-modules.md).  
+Status: **Engine ✅** · **Track C operator UI ~98% ✅** (ChatIQ schedule + settings; legacy Bookings hidden; `/admin` ops-only). Optional: archive legacy dashboard code; time blocks / customers in ChatIQ. Workspace: [`ROADMAP.md`](../../ROADMAP.md) §C. Spec: [`chatiq-booking-operator-ui.md`](./chatiq-booking-operator-ui.md). Design: [`booking-command-library.md`](./booking-command-library.md) · Identity: [`identity-and-account-linking.md`](./identity-and-account-linking.md) · Catalog: [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) · Modules: [`base-and-shape-modules.md`](./base-and-shape-modules.md).  
 Owner: Engineering
 
 ## Resume here (next session)
 
-**Track C core DoD met (~95%).** Optional polish below; engine + ChatIQ operator UI are the default product path.
+**Paused 2026-10-26 evening.** Track C ~98% — ChatIQ operator UI is live.
+
+**How to open it:** My Bots → bot → **Booking** (not the booking_mode dropdown in bot Settings).  
+- Schedule: `/dashboard/bots/[slug]/booking`  
+- Setup: `/dashboard/bots/[slug]/booking/settings`  
+Needs `BOOKING_RUNTIME=sibling` + URL + token on that deploy.
 
 ### Track C — ChatIQ operator UI — mostly done
 
@@ -15,7 +20,7 @@ Owner: Engineering
 11. ~~**Hide legacy `/dashboard/bookings`**~~ ✅ **DONE 2026-10-26** — sidebar hidden when sibling runtime; soft landing on all `/dashboard/bookings/*`; dashboard snapshot points at My Bots. Delete/archive of legacy code still later.  
 12. ~~**Demote sibling `/admin`**~~ ✅ **DONE 2026-10-26** — docs frame `/admin` as ops/pilot only; ChatIQ is the product surface.
 
-**Optional next:** archive legacy `/dashboard/bookings` code; time blocks / custom exception windows in ChatIQ; payments / large-catalog prompts.
+**Optional next session:** smoke the ChatIQ Booking UI on a pilot bot; archive legacy `/dashboard/bookings` code; time blocks in ChatIQ; payments / large-catalog prompts. Or pick Watch / core chat from [`ROADMAP.md`](../../ROADMAP.md).
 
 ### Track A — Base + appointments (complete)
 
@@ -234,6 +239,20 @@ Phases 1–2 + 3a + 3b.0 + 3b console + shape modules (`resources` / `stays` / l
 - [x] Customer notification on admin changes via ChatIQ (2026-10-25)
 
 ## 4) Progress Log
+
+### 2026-10-26 — Docs sync + pause (roadmap / operator-ui spec)
+
+**What changed (docs only)**
+- Spec rewritten for shipped state + **how to open** (My Bots → Booking, not mode dropdown).
+- ROADMAP §C, mission header, AGENTS, README, `_active-focus` aligned to ~98% paused.
+
+**Approx. toward DoD:** Track C **~98%** (unchanged).
+
+```text
+chatiq: Operator UI (Track C): [###################_] 98% -> DoD
+```
+
+**Next session:** pilot smoke of ChatIQ Booking UI; or archive legacy dashboard code / Watch Phase B.
 
 ### 2026-10-26 — Track C slice 5: eligibility + closed dates in ChatIQ settings
 

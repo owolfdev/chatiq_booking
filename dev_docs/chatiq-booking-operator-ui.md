@@ -1,7 +1,7 @@
 # ChatIQ booking operator UI (product surface)
 
 Last updated: 2026-10-26  
-Status: **Design locked.** Schedule ✅ · Settings v1 ✅ · Legacy hide ✅ · Sibling `/admin` demoted to ops-only in docs ✅.  
+Status: **Shipped (~98%).** Schedule ✅ · Settings ✅ · Legacy hide ✅ · Sibling `/admin` ops-only ✅. Remaining: delete legacy dashboard code; optional time-blocks / customers-audit.  
 Mission: [`_mission-booking-sibling-v1.md`](./_mission-booking-sibling-v1.md) · Workspace: [`ROADMAP.md`](../../ROADMAP.md) §C
 
 ## 1) Verdict
@@ -10,7 +10,7 @@ Mission: [`_mission-booking-sibling-v1.md`](./_mission-booking-sibling-v1.md) ·
 
 **`chatiq-booking` remains the engine** (Supabase, commands API, availability, identity, audit). ChatIQ must not reimplement booking business logic.
 
-Sibling `/admin` is **ops/pilot only** (pasted service token). Subscribers use ChatIQ. Remaining gaps (eligibility matrix, holiday exceptions) may still need `/admin` until ported.
+Sibling `/admin` is **ops/pilot only** (pasted service token). Subscribers use ChatIQ for normal setup and schedule. Optional leftover on `/admin`: time blocks, custom exception windows, customers/audit/copilot until those land in ChatIQ.
 
 ## 2) Why
 
@@ -18,52 +18,65 @@ Sibling `/admin` is **ops/pilot only** (pasted service token). Subscribers use C
 - Sibling `/admin` uses a pasted service token — fine for pilots, wrong for GTM.
 - Legacy `/dashboard/bookings/` is the **old in-process engine** and must not be extended for the sibling.
 
-## 3) Product surfaces in ChatIQ (per bot)
+## 3) How to open it (operators)
 
-| Surface | Purpose |
-|---------|---------|
-| **Booking settings** | Enable booking mode; shapes (`appointments` / `resources` / `stays`); services; hours; resources + eligibility + person+room; stays notes |
-| **Schedule** | See customer bookings; cancel / reschedule / no-show / create-on-behalf |
-| **Customers / audit** (later) | Linked identities; who changed what |
+**Not** the booking mode dropdown in bot Settings (`off` / `intent_only` / `full`) — that only gates chat.
 
-Suggested routes (names flexible at impl):
+1. **My Bots** → open the bot  
+2. Click **Booking** (next to Settings)  
+3. Or go directly:
 
 ```text
-/dashboard/bots/[botId]/booking          → schedule (default)
-/dashboard/bots/[botId]/booking/settings → shapes + catalog + hours + resources/stays
+/dashboard/bots/[slug]/booking          → schedule (list + cancel / reschedule / no-show / create)
+/dashboard/bots/[slug]/booking/settings → shapes, services, hours (+ closed dates), resources, eligibility / person+room
 ```
 
-Or under existing bot settings with a **Booking** tab. Prefer one clear entry from the bot, not a second global “Bookings” nav that points at legacy.
+Requires `BOOKING_RUNTIME=sibling` + `BOOKING_SIBLING_URL` + `BOOKING_SIBLING_TOKEN` on that ChatIQ deploy. Set bot **booking_mode=full** when chat booking should be live.
 
-## 4) Architecture rules
+Global sidebar **Bookings** is hidden when sibling runtime is on; `/dashboard/bookings` soft-lands to My Bots.
 
-1. ChatIQ UI → `POST` sibling `commands/execute` (same verbs as sibling `/admin`).
-2. Auth: ChatIQ session + team membership; server-side use sibling service token (never expose token to the browser).
-3. Scope every call with the selected `team_id` + `bot_id`.
-4. No booking tables in ChatIQ Postgres for operator data — sibling DB is source of truth.
-5. Concierge / customer chat path unchanged (already thin adapter).
+## 4) Product surfaces in ChatIQ (per bot)
 
-## 5) Legacy `/dashboard/bookings/`
+| Surface | Status | Purpose |
+|---------|--------|---------|
+| **Schedule** | ✅ | See customer bookings; cancel / reschedule / no-show / create-on-behalf |
+| **Booking settings** | ✅ | Shapes, services, hours (+ closed dates), resources + eligibility + person+room |
+| **booking_mode** (bot Settings form) | Separate | Chat gate only — not the operator catalog UI |
+| **Customers / audit** | Later | Linked identities; who changed what (still sibling `/admin` for now) |
 
-| Step | Action |
-|------|--------|
-| 1 | **Hide** from sidebar / header when sibling is the active runtime (or feature-flag) |
-| 2 | Soft landing: page explains “Booking moved” + link to new bot booking UI once live |
-| 3 | **Delete / archive** routes + legacy booking actions after ChatIQ operator UI ships and pilots don’t need the old flows |
+## 5) Architecture rules
 
-Do **not** wire legacy UI to the sibling as a shortcut — replace it.
+1. ChatIQ UI → sibling `commands/execute` (and admin bookings list) via staff API routes.  
+2. Auth: ChatIQ session + team membership; server-side service token (never in the browser).  
+3. Scope every call with the selected `team_id` + `bot_id`.  
+4. No booking tables in ChatIQ Postgres for operator data — sibling DB is source of truth.  
+5. Concierge / customer chat path unchanged (thin adapter).
 
-## 6) Implementation order (Track C)
+Staff helpers: `chatiq/src/lib/booking-sibling/staff.ts` · `POST /api/booking/staff/command` · `GET /api/booking/staff/bookings`.
 
-1. ~~ChatIQ server helper: execute sibling command as staff actor for a bot the user can manage.~~ ✅ `src/lib/booking-sibling/staff.ts` + `POST /api/booking/staff/command` + `GET /api/booking/staff/bookings`  
-2. ~~**Schedule** page (read + mutate via existing commands)~~ ✅ list + cancel / reschedule / no-show / create-on-behalf at `/dashboard/bots/[slug]/booking`.  
-3. ~~**Settings** page~~ ✅ — shapes, services, hours (+ closed dates), resources, eligibility / person+room at `/dashboard/bots/[slug]/booking/settings`.  
-4. ~~Hide legacy `/dashboard/bookings` nav~~ ✅ + soft landing when sibling runtime.  
-5. Remove legacy booking dashboard code when safe.  
-6. ~~Demote sibling `/admin` to ops-only in docs~~ ✅ (README + mission + this spec).
+## 6) Legacy `/dashboard/bookings/`
 
-## 7) Success criteria
+| Step | Status | Action |
+|------|--------|--------|
+| 1 | ✅ | Hide from sidebar when sibling runtime configured |
+| 2 | ✅ | Soft landing on `/dashboard/bookings/**` → My Bots |
+| 3 | Later | Delete / archive legacy routes + in-process booking dashboard code |
 
-- A team admin never needs `chatiq-booking.vercel.app/admin` for normal setup or schedule review.  
-- Legacy bookings nav is gone or clearly archived.  
-- Sibling remains the only place booking rules and persistence live.
+Do **not** wire legacy UI to the sibling as a shortcut — replace it (done for nav/soft-land).
+
+## 7) Implementation checklist (Track C)
+
+1. ~~ChatIQ server helper~~ ✅ `staff.ts` + staff API routes  
+2. ~~Schedule page~~ ✅ `/dashboard/bots/[slug]/booking`  
+3. ~~Settings page~~ ✅ shapes, services, hours (+ closed dates), resources, eligibility / person+room  
+4. ~~Hide legacy nav + soft landing~~ ✅  
+5. Remove legacy booking dashboard code when safe  
+6. ~~Demote sibling `/admin` to ops-only in docs~~ ✅ (+ ops banner in AdminShell)
+
+## 8) Success criteria
+
+- [x] A team admin can set up catalog/hours/resources and manage the schedule in ChatIQ without pasting a sibling service token.  
+- [x] Legacy Bookings nav is hidden when sibling runtime is on; deep links soft-land.  
+- [x] Sibling remains the only place booking rules and persistence live.  
+- [ ] Legacy `/dashboard/bookings` code deleted/archived.  
+- [ ] Optional: customers/audit + time blocks in ChatIQ (today: sibling `/admin`).
