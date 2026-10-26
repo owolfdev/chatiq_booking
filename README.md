@@ -1,6 +1,8 @@
 # chatiq-booking
 
-Isolated booking sibling for ChatIQ. Core chat stays safe: ChatIQ calls this app over HTTPS only when a bot is gated on and the sibling runtime is enabled.
+Isolated booking **engine** for ChatIQ. Core chat stays safe: ChatIQ calls this app over HTTPS only when a bot is gated on and the sibling runtime is enabled.
+
+**Operators:** configure schedule and settings in **ChatIQ** (`/dashboard/bots/[slug]/booking`). Sibling `/admin` is **ops/pilot only** (service token) — not the subscriber product surface. Spec: [`dev_docs/chatiq-booking-operator-ui.md`](./dev_docs/chatiq-booking-operator-ui.md).
 
 ## Local
 

@@ -89,6 +89,21 @@ export function AdminShell(props: {
       <p style={{ marginBottom: "0.5rem" }}>
         <a href="/">← ChatIQ Booking</a>
       </p>
+      <p
+        style={{
+          ...styles.muted,
+          marginBottom: "1rem",
+          padding: "0.65rem 0.75rem",
+          border: "1px solid #ddd",
+          borderRadius: 6,
+          background: "#fafafa",
+          fontSize: "0.85rem",
+        }}
+      >
+        <strong>Ops / pilot console.</strong> Subscribers configure booking in
+        ChatIQ (<code>/dashboard/bots/[slug]/booking</code>). This UI needs the
+        service token and is not the product surface.
+      </p>
       <nav style={styles.nav} aria-label="Admin">
         {NAV.map((item) => (
           <a

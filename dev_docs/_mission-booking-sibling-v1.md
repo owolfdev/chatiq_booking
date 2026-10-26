@@ -6,14 +6,16 @@ Owner: Engineering
 
 ## Resume here (next session)
 
-**Engine track done.** **Default next = Track C** (ChatIQ product UI). Spec: [`chatiq-booking-operator-ui.md`](./chatiq-booking-operator-ui.md).
+**Track C core DoD met (~95%).** Optional polish below; engine + ChatIQ operator UI are the default product path.
 
-### Track C — ChatIQ operator UI — **← START HERE**
+### Track C — ChatIQ operator UI — mostly done
 
 9. ~~**Per-bot booking settings in ChatIQ**~~ ✅ **v1 DONE 2026-10-26** — shapes, services, hours, resources CRUD. Eligibility / person+room linking / exceptions+blocks still sibling `/admin` for now.  
 10. ~~**Per-bot schedule in ChatIQ**~~ ✅ **DONE 2026-10-26** — list + cancel / reschedule / no-show / create-on-behalf. Staff API: `/api/booking/staff/*`.  
-11. **Hide legacy `/dashboard/bookings`** — old engine UI; soft landing then delete/archive.  
-12. **Demote sibling `/admin`** — ops-only after ChatIQ parity.
+11. ~~**Hide legacy `/dashboard/bookings`**~~ ✅ **DONE 2026-10-26** — sidebar hidden when sibling runtime; soft landing on all `/dashboard/bookings/*`; dashboard snapshot points at My Bots. Delete/archive of legacy code still later.  
+12. ~~**Demote sibling `/admin`**~~ ✅ **DONE 2026-10-26** — docs frame `/admin` as ops/pilot only; ChatIQ is the product surface.
+
+**Optional next:** port eligibility / exceptions into ChatIQ settings; archive legacy dashboard code; payments / large-catalog prompts.
 
 ### Track A — Base + appointments (complete)
 
@@ -147,8 +149,8 @@ Spec: [`chatiq-booking-operator-ui.md`](./chatiq-booking-operator-ui.md). Done w
 - [x] ChatIQ server helper: staff-scoped sibling `commands/execute` for bots the user can manage (token never in browser) — 2026-10-26
 - [x] Per-bot **schedule** in ChatIQ (list + cancel / reschedule / no-show / create-on-behalf) — 2026-10-26
 - [x] Per-bot **settings** in ChatIQ (shapes, services, hours, resources CRUD) — 2026-10-26; eligibility/exceptions still sibling admin
-- [ ] Legacy `/dashboard/bookings` hidden (then soft landing → delete/archive)
-- [ ] Sibling `/admin` demoted to ops-only in docs once ChatIQ parity ships
+- [x] Legacy `/dashboard/bookings` hidden + soft landing when sibling runtime — 2026-10-26 (code delete/archive later)
+- [x] Sibling `/admin` demoted to ops-only in docs — 2026-10-26
 
 ### Overall v1 DoD
 
@@ -233,6 +235,24 @@ Phases 1–2 + 3a + 3b.0 + 3b console + shape modules (`resources` / `stays` / l
 
 ## 4) Progress Log
 
+### 2026-10-26 — Track C slice 4: hide legacy Bookings + demote sibling `/admin`
+
+**What changed**
+- Sidebar: omit global Bookings when `BOOKING_RUNTIME=sibling`.
+- `/dashboard/bookings/**` soft landing → My Bots / per-bot Booking.
+- Overview snapshot CTA points at My Bots in sibling mode.
+- Docs: sibling `/admin` = ops/pilot only (README + operator-ui + mission).
+
+**Verified:** lint on edited layout/sidebar/env.
+
+**Approx. toward DoD:** Track C **~95%** (optional: eligibility/exceptions in ChatIQ; delete legacy dashboard code).
+
+```text
+chatiq: Operator UI (Track C): [###################_] 95% -> DoD
+```
+
+**Next:** optional eligibility / exceptions / person+room linking UI in ChatIQ settings; later archive legacy `/dashboard/bookings` code.
+
 ### 2026-10-26 — Track C slice 3: ChatIQ booking settings panels
 
 **What changed**
@@ -241,11 +261,7 @@ Phases 1–2 + 3a + 3b.0 + 3b console + shape modules (`resources` / `stays` / l
 
 **Verified:** lint clean on settings client.
 
-**Approx. toward DoD:** Track C **~70%**.
-
-```text
-chatiq: Operator UI (Track C): [##############______] 70% -> DoD
-```
+**Approx. toward DoD:** Track C **~70%** (superseded by slice 4).
 
 **Next:** hide legacy `/dashboard/bookings` nav; optional eligibility / exceptions polish; demote sibling `/admin`.
 
