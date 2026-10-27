@@ -2,7 +2,7 @@
 
 Isolated booking **engine** for ChatIQ. Core chat stays safe: ChatIQ calls this app over HTTPS only when a bot is gated on and the sibling runtime is enabled.
 
-**Operators:** configure schedule and settings in **ChatIQ** (`/dashboard/bots/[slug]/booking`). Booking links appear in My Bots, bot Settings/preview, and internal chat test for full booking bots. Sibling `/admin` is **ops/pilot only** (service token). **Current next action:** verify the October 27 pushed changes on deployed pilot builds, especially hard-delete against Supabase. Resume checklist: [`dev_docs/_mission-booking-sibling-v1.md`](./dev_docs/_mission-booking-sibling-v1.md). Spec: [`dev_docs/chatiq-booking-operator-ui.md`](./dev_docs/chatiq-booking-operator-ui.md).
+**Operators:** configure schedule and settings in **ChatIQ** (`/dashboard/bots/[slug]/booking`). Sibling `/admin` is **ops/pilot only**. **What’s next:** [`ROADMAP.md`](./ROADMAP.md). Mission: [`dev_docs/_mission-booking-sibling-v1.md`](./dev_docs/_mission-booking-sibling-v1.md). Spec: [`dev_docs/chatiq-booking-operator-ui.md`](./dev_docs/chatiq-booking-operator-ui.md).
 
 ## Local
 
@@ -17,6 +17,7 @@ npm run dev   # http://localhost:3003
 
 ## Docs
 
+- **What’s next:** [`ROADMAP.md`](./ROADMAP.md)
 - Mission: [`dev_docs/_mission-booking-sibling-v1.md`](./dev_docs/_mission-booking-sibling-v1.md)
 - API contract: [`dev_docs/api-contract-v0.md`](./dev_docs/api-contract-v0.md)
 - Intent → commands: [`dev_docs/booking-command-library.md`](./dev_docs/booking-command-library.md)
@@ -29,7 +30,7 @@ npm run dev   # http://localhost:3003
 
 ## ChatIQ adapter (chat path wired)
 
-Pilot foundation is live: ChatIQ points at the sibling for allowlisted bots, and create/lookup/cancel/reschedule were chat-smoked. **Design locked (2026-10-21): LLM concierge drives the deterministic sibling via typed commands** — see [`dev_docs/booking-command-library.md`](./dev_docs/booking-command-library.md). The October 27 hard-delete/UI changes still need deployed pilot verification: [`dev_docs/_mission-booking-sibling-v1.md`](./dev_docs/_mission-booking-sibling-v1.md) (**Resume here**).
+Pilot foundation is live: ChatIQ points at the sibling for allowlisted bots; Track C operator UI is production-confirmed (2026-10-28). **Design locked (2026-10-21): LLM concierge drives the deterministic sibling via typed commands** — see [`dev_docs/booking-command-library.md`](./dev_docs/booking-command-library.md). Resume: [`ROADMAP.md`](./ROADMAP.md) · [`dev_docs/_mission-booking-sibling-v1.md`](./dev_docs/_mission-booking-sibling-v1.md).
 
 In `chatiq` `.env.local` (or Vercel):
 

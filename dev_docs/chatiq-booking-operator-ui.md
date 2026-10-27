@@ -1,9 +1,9 @@
 # ChatIQ booking operator UI (product surface)
 
-Last updated: 2026-10-27  
-Status: **~98% implemented; production pilot verification next.** Schedule ✅ · Settings ✅ · conditional Booking links ✅ · Legacy hide ✅ · Sibling `/admin` ops-only ✅. October 27 changes are pushed, but their deployed browser behavior has not been verified. Later: archive legacy dashboard code; optional time blocks / customers-audit.
+Last updated: 2026-10-28  
+Status: **~99% shipped; production ✅.** Schedule ✅ · Settings ✅ · Booking links ✅ · Legacy UI archived ✅ · Sibling `/admin` ops-only ✅. Optional: time blocks / customers-audit in ChatIQ.
 
-Mission: [`_mission-booking-sibling-v1.md`](./_mission-booking-sibling-v1.md) · Workspace: [`ROADMAP.md`](../../ROADMAP.md) §C
+Mission: [`_mission-booking-sibling-v1.md`](./_mission-booking-sibling-v1.md) · Roadmap: [`../ROADMAP.md`](../ROADMAP.md) · Workspace index: [`../../ROADMAP.md`](../../ROADMAP.md)
 
 ## 1) Verdict
 
@@ -36,7 +36,7 @@ Requires `BOOKING_RUNTIME=sibling` + `BOOKING_SIBLING_URL` + `BOOKING_SIBLING_TO
 
 The links use `booking_mode=full` as the discoverability gate. The direct operator URLs remain accessible to an authorized team member when sibling runtime is configured, so an owner can prepare catalog and hours before turning on chat booking.
 
-Global sidebar **Bookings** is hidden when sibling runtime is on; `/dashboard/bookings` soft-lands to My Bots.
+Global sidebar **Bookings** is removed; `/dashboard/bookings/**` soft-lands to My Bots (legacy UI archived 2026-10-28).
 
 ## 4) Product surfaces in ChatIQ (per bot)
 
@@ -61,11 +61,11 @@ Staff helpers: `chatiq/src/lib/booking-sibling/staff.ts` · `POST /api/booking/s
 
 | Step | Status | Action |
 |------|--------|--------|
-| 1 | ✅ | Hide from sidebar when sibling runtime configured |
+| 1 | ✅ | Bookings removed from sidebar |
 | 2 | ✅ | Soft landing on `/dashboard/bookings/**` → My Bots |
-| 3 | Later | Delete / archive legacy routes + in-process booking dashboard code |
+| 3 | ✅ | Legacy dashboard routes deleted (2026-10-28); catch-all soft landing only |
 
-Do **not** wire legacy UI to the sibling as a shortcut — replace it (done for nav/soft-land).
+In-process booking **engine** leftovers in `chatiq` (actions/chat) are separate optional WS-D work — do not revive the global dashboard.
 
 ## 7) Implementation checklist (Track C)
 
@@ -73,17 +73,17 @@ Do **not** wire legacy UI to the sibling as a shortcut — replace it (done for 
 2. ~~Schedule page~~ ✅ `/dashboard/bots/[slug]/booking`  
 3. ~~Settings page~~ ✅ shapes, services, hours (+ closed dates), resources, eligibility / person+room  
 4. ~~Hide legacy nav + soft landing~~ ✅  
-5. Remove legacy booking dashboard code when safe  
+5. ~~Archive legacy booking dashboard UI~~ ✅ 2026-10-28  
 6. ~~Demote sibling `/admin` to ops-only in docs~~ ✅ (+ ops banner in AdminShell)
 
 ## 8) Success criteria
 
 - [x] A team admin can set up catalog/hours/resources and manage the schedule in ChatIQ without pasting a sibling service token.  
-- [x] Legacy Bookings nav is hidden when sibling runtime is on; deep links soft-land.  
+- [x] Legacy Bookings nav removed; deep links soft-land.  
 - [x] Sibling remains the only place booking rules and persistence live.  
 - [x] Local pilot Supabase smoke confirms staff hard-delete removes a row and a second delete returns `BOOKING_NOT_FOUND` (2026-10-27).
-- [ ] On deployed builds, verify single/bulk delete removes disposable pilot IDs from Supabase; confirm operation feedback, saved choices, and conditional links in a browser.
-- [ ] Legacy `/dashboard/bookings` code deleted/archived.  
+- [x] Production booking confirmed by operator (2026-10-28).  
+- [x] Legacy `/dashboard/bookings` UI deleted/archived (2026-10-28).  
 - [ ] Optional: customers/audit + time blocks in ChatIQ (today: sibling `/admin`).
 
 ## 9) Release check for October 27 changes
