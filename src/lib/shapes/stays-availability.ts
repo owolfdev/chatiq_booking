@@ -65,6 +65,20 @@ export function stayDateToUtc(
   return localWallToUtc(p.year, p.month, p.day, 0, 0, timeZone);
 }
 
+/** Calendar YYYY-MM-DD in `timeZone` for a stay instant (usually local midnight). */
+export function stayUtcToYmd(
+  iso: string,
+  timeZone: string
+): string | null {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const p = zonedParts(d, timeZone);
+  if (!Number.isFinite(p.year) || !Number.isFinite(p.month) || !Number.isFinite(p.day)) {
+    return null;
+  }
+  return ymd(p.year, p.month, p.day);
+}
+
 export function nightsBetween(checkIn: string, checkOut: string): number {
   const a = parseYmd(checkIn);
   const b = parseYmd(checkOut);

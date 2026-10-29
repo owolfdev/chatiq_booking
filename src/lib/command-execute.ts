@@ -30,6 +30,7 @@ import {
   nightsBetween,
   searchStayAvailability,
   stayDateToUtc,
+  stayUtcToYmd,
 } from "@/lib/shapes/stays-availability";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import {
@@ -1504,19 +1505,43 @@ export async function executeBookingCommand(
 
     if (command === "booking.get_existing") {
       const booking = await getLatestOpenBooking({ team_id, bot_id, contact_id: contactId });
+      if (!booking) {
+        return ok(command, { contact_id: contactId, booking: null });
+      }
+      const tz = booking.timezone || timezone;
+      const isStay = Boolean(booking.ends_at && booking.starts_at);
+      const checkIn =
+        isStay && booking.starts_at
+          ? stayUtcToYmd(booking.starts_at, tz)
+          : null;
+      const checkOut =
+        isStay && booking.ends_at
+          ? stayUtcToYmd(booking.ends_at, tz)
+          : null;
+      const service = items.find((i) => i.id === booking.catalog_item_id) ?? null;
       return ok(command, {
         contact_id: contactId,
-        booking: booking
-          ? {
-              id: booking.id,
-              status: booking.status,
-              starts_at: booking.starts_at,
-              timezone: booking.timezone,
-              catalog_item_id: booking.catalog_item_id,
-              resource_id: booking.resource_id ?? null,
-              ends_at: booking.ends_at ?? null,
-            }
-          : null,
+        booking: {
+          id: booking.id,
+          status: booking.status,
+          starts_at: booking.starts_at,
+          timezone: tz,
+          catalog_item_id: booking.catalog_item_id,
+          resource_id: booking.resource_id ?? null,
+          ends_at: booking.ends_at ?? null,
+          shape: isStay ? "stays" : "appointments",
+          check_in: checkIn,
+          check_out: checkOut,
+          nights:
+            checkIn && checkOut ? nightsBetween(checkIn, checkOut) : null,
+          service: service
+            ? {
+                id: service.id,
+                slug: service.slug,
+                title: service.title,
+              }
+            : null,
+        },
       });
     }
 
