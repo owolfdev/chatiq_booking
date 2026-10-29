@@ -39,10 +39,23 @@ type BlockRow = {
   reason: string | null;
 };
 
+/** Accepts `HH:mm` or Postgres `HH:mm:ss`. */
 function toHm(value: string): string {
-  const m = /^(\d{1,2}):(\d{2})/.exec(value.trim());
+  const m = /^(\d{1,2}):(\d{2})(?::\d{2})?/.exec(value.trim());
   if (!m) return "09:00";
-  return `${String(Number(m[1])).padStart(2, "0")}:${m[2]}`;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (
+    !Number.isFinite(h) ||
+    !Number.isFinite(min) ||
+    h < 0 ||
+    h > 23 ||
+    min < 0 ||
+    min > 59
+  ) {
+    return "09:00";
+  }
+  return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
 }
 
 function HoursPanel({
@@ -294,23 +307,53 @@ function HoursPanel({
                   </td>
                   <td style={adminUi.td}>
                     <input
-                      type="time"
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="09:00"
+                      pattern="[0-2][0-9]:[0-5][0-9]"
+                      title="24-hour time HH:mm"
                       disabled={!open}
-                      style={{ ...adminUi.input, fontFamily: "inherit" }}
+                      style={{
+                        ...adminUi.input,
+                        fontFamily: "ui-monospace, monospace",
+                        width: 88,
+                      }}
                       value={win?.start_local ?? "09:00"}
                       onChange={(e) =>
                         setDayWindow(day.value, "start_local", e.target.value)
+                      }
+                      onBlur={(e) =>
+                        setDayWindow(
+                          day.value,
+                          "start_local",
+                          toHm(e.target.value || "09:00")
+                        )
                       }
                     />
                   </td>
                   <td style={adminUi.td}>
                     <input
-                      type="time"
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="17:00"
+                      pattern="[0-2][0-9]:[0-5][0-9]"
+                      title="24-hour time HH:mm"
                       disabled={!open}
-                      style={{ ...adminUi.input, fontFamily: "inherit" }}
+                      style={{
+                        ...adminUi.input,
+                        fontFamily: "ui-monospace, monospace",
+                        width: 88,
+                      }}
                       value={win?.end_local ?? "17:00"}
                       onChange={(e) =>
                         setDayWindow(day.value, "end_local", e.target.value)
+                      }
+                      onBlur={(e) =>
+                        setDayWindow(
+                          day.value,
+                          "end_local",
+                          toHm(e.target.value || "17:00")
+                        )
                       }
                     />
                   </td>

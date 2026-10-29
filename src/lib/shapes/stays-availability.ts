@@ -186,9 +186,24 @@ export function searchStayAvailability(params: {
   }
 
   const nights = Math.max(1, Math.min(30, params.nights ?? 1));
+  const cinOnly = params.checkIn ? parseYmd(params.checkIn) : null;
+
+  // check_in without check_out: treat as that exact stay (nights default 1).
+  // Previously this fell through and searched from "tomorrow", ignoring check_in
+  // — so "Nov 15 for 2 nights" returned late-Oct offers instead.
+  if (cinOnly && !params.dateFrom && !params.dateTo) {
+    const cout = addDays(cinOnly.year, cinOnly.month, cinOnly.day, nights);
+    pushIfOpen(
+      params.checkIn!,
+      ymd(cout.year, cout.month, cout.day)
+    );
+    return offers;
+  }
+
   const nowParts = zonedParts(now, timeZone);
   const startDay =
     parseYmd(params.dateFrom ?? "") ??
+    cinOnly ??
     addDays(nowParts.year, nowParts.month, nowParts.day, 1);
   const defaultEnd = addDays(startDay.year, startDay.month, startDay.day, 14);
   const endDay = parseYmd(params.dateTo ?? "") ?? defaultEnd;
