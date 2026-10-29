@@ -185,8 +185,19 @@ export function searchStayAvailability(params: {
     return offers;
   }
 
-  const nights = Math.max(1, Math.min(30, params.nights ?? 1));
   const cinOnly = params.checkIn ? parseYmd(params.checkIn) : null;
+  const fromDay = parseYmd(params.dateFrom ?? "");
+  const toDay = parseYmd(params.dateTo ?? "");
+
+  // date_from + date_to without nights → exact stay (hotel "Nov 5 to Nov 7").
+  // Appointment-style windows with omitted nights used to default nights=1 and
+  // return 1-night offers that models misread as the full multi-night range.
+  if (fromDay && toDay && params.nights == null && !params.checkIn) {
+    pushIfOpen(params.dateFrom!, params.dateTo!);
+    return offers;
+  }
+
+  const nights = Math.max(1, Math.min(30, params.nights ?? 1));
 
   // check_in without check_out: treat as that exact stay (nights default 1).
   // Previously this fell through and searched from "tomorrow", ignoring check_in
@@ -202,11 +213,11 @@ export function searchStayAvailability(params: {
 
   const nowParts = zonedParts(now, timeZone);
   const startDay =
-    parseYmd(params.dateFrom ?? "") ??
+    fromDay ??
     cinOnly ??
     addDays(nowParts.year, nowParts.month, nowParts.day, 1);
   const defaultEnd = addDays(startDay.year, startDay.month, startDay.day, 14);
-  const endDay = parseYmd(params.dateTo ?? "") ?? defaultEnd;
+  const endDay = toDay ?? defaultEnd;
   const totalDays = Math.min(62, Math.max(0, dayDiff(startDay, endDay)));
 
   for (let offset = 0; offset <= totalDays && offers.length < count; offset++) {
