@@ -89,6 +89,7 @@ import {
   isShortBookingRef,
   listCatalogItems,
   listOccupiedIntervals,
+  listOpenBookings,
   listStayOccupied,
   markBookingNoShow,
   resolveOrCreateContact,
@@ -115,6 +116,45 @@ function str(slots: Slots, ...keys: string[]): string | null {
 /** Guest/staff short ref — same 8-char prefix as ChatIQ schedule Id column. */
 function shortBookingRef(bookingId: string): string {
   return bookingId.slice(0, 8);
+}
+
+function serializeCustomerBooking(
+  booking: DbBooking,
+  items: DbCatalogItem[],
+  fallbackTz: string
+): Record<string, unknown> {
+  const tz = booking.timezone || fallbackTz;
+  const isStay = Boolean(booking.ends_at && booking.starts_at);
+  const checkIn =
+    isStay && booking.starts_at
+      ? stayUtcToYmd(booking.starts_at, tz)
+      : null;
+  const checkOut =
+    isStay && booking.ends_at
+      ? stayUtcToYmd(booking.ends_at, tz)
+      : null;
+  const service = items.find((i) => i.id === booking.catalog_item_id) ?? null;
+  return {
+    id: booking.id,
+    booking_ref: shortBookingRef(booking.id),
+    status: booking.status,
+    starts_at: booking.starts_at,
+    timezone: tz,
+    catalog_item_id: booking.catalog_item_id,
+    resource_id: booking.resource_id ?? null,
+    ends_at: booking.ends_at ?? null,
+    shape: isStay ? "stays" : "appointments",
+    check_in: checkIn,
+    check_out: checkOut,
+    nights: checkIn && checkOut ? nightsBetween(checkIn, checkOut) : null,
+    service: service
+      ? {
+          id: service.id,
+          slug: service.slug,
+          title: service.title,
+        }
+      : null,
+  };
 }
 
 function fail(
@@ -1460,6 +1500,11 @@ export async function executeBookingCommand(
       if (!profile) {
         return fail(command, "CONTACT_NOT_FOUND", `Unknown contact: ${contactId}`);
       }
+      const open = await listOpenBookings({
+        team_id,
+        bot_id,
+        contact_id: profile.contact.id,
+      });
       return ok(command, {
         contact: {
           id: profile.contact.id,
@@ -1468,7 +1513,10 @@ export async function executeBookingCommand(
           phone: profile.contact.phone,
         },
         bindings: profile.bindings,
-        upcoming_bookings: profile.upcoming_bookings,
+        upcoming_bookings: open.map((b) =>
+          serializeCustomerBooking(b, items, timezone)
+        ),
+        upcoming_count: open.length,
       });
     }
 
@@ -1512,45 +1560,20 @@ export async function executeBookingCommand(
     }
 
     if (command === "booking.get_existing") {
-      const booking = await getLatestOpenBooking({ team_id, bot_id, contact_id: contactId });
-      if (!booking) {
-        return ok(command, { contact_id: contactId, booking: null });
-      }
-      const tz = booking.timezone || timezone;
-      const isStay = Boolean(booking.ends_at && booking.starts_at);
-      const checkIn =
-        isStay && booking.starts_at
-          ? stayUtcToYmd(booking.starts_at, tz)
-          : null;
-      const checkOut =
-        isStay && booking.ends_at
-          ? stayUtcToYmd(booking.ends_at, tz)
-          : null;
-      const service = items.find((i) => i.id === booking.catalog_item_id) ?? null;
+      const open = await listOpenBookings({
+        team_id,
+        bot_id,
+        contact_id: contactId,
+      });
+      const bookings = open.map((b) =>
+        serializeCustomerBooking(b, items, timezone)
+      );
       return ok(command, {
         contact_id: contactId,
-        booking: {
-          id: booking.id,
-          booking_ref: shortBookingRef(booking.id),
-          status: booking.status,
-          starts_at: booking.starts_at,
-          timezone: tz,
-          catalog_item_id: booking.catalog_item_id,
-          resource_id: booking.resource_id ?? null,
-          ends_at: booking.ends_at ?? null,
-          shape: isStay ? "stays" : "appointments",
-          check_in: checkIn,
-          check_out: checkOut,
-          nights:
-            checkIn && checkOut ? nightsBetween(checkIn, checkOut) : null,
-          service: service
-            ? {
-                id: service.id,
-                slug: service.slug,
-                title: service.title,
-              }
-            : null,
-        },
+        /** Next upcoming (compat for older concierge prompts). */
+        booking: bookings[0] ?? null,
+        bookings,
+        upcoming_count: bookings.length,
       });
     }
 

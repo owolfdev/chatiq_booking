@@ -599,30 +599,40 @@ export type DbBooking = {
  * treated as current (blocks create, shows in lookup, offered for cancel).
  * Found in chat-smoke 2026-10-21 (expired 20 Oct booking still "upcoming").
  */
-export async function getLatestOpenBooking(input: {
+/** Upcoming open bookings for a contact (team-scoped; next first). */
+export async function listOpenBookings(input: {
   team_id: string;
   bot_id: string;
   contact_id: string;
-}): Promise<DbBooking | null> {
+  limit?: number;
+}): Promise<DbBooking[]> {
   const supabase = createBookingAdminClient();
-  if (!supabase) return null;
+  if (!supabase) return [];
   // Contact-scoped across bots on the team so a linked web door can find a
   // booking created on LINE (and the reverse). Slot conflict checks stay bot-scoped.
   void input.bot_id;
   const { data, error } = await supabase
     .from("bookings")
-    .select("id, status, starts_at, ends_at, timezone, catalog_item_id, resource_id")
+    .select("id, status, starts_at, ends_at, timezone, catalog_item_id, resource_id, contact_id")
     .eq("team_id", input.team_id)
     .eq("contact_id", input.contact_id)
     .in("status", ["pending", "confirmed"])
     .gte("starts_at", new Date().toISOString())
     .order("starts_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    .limit(Math.min(50, Math.max(1, input.limit ?? 20)));
   if (error) {
     throw new Error(`bookings lookup failed: ${error.message}`);
   }
-  return (data as DbBooking | null) ?? null;
+  return (data as DbBooking[]) ?? [];
+}
+
+export async function getLatestOpenBooking(input: {
+  team_id: string;
+  bot_id: string;
+  contact_id: string;
+}): Promise<DbBooking | null> {
+  const rows = await listOpenBookings({ ...input, limit: 1 });
+  return rows[0] ?? null;
 }
 
 /** Open stay bookings (ends_at set) for night-range capacity checks. */
