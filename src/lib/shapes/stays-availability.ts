@@ -195,6 +195,15 @@ export function searchStayAvailability(params: {
   };
 
   if (params.checkIn && params.checkOut) {
+    // Same calendar day (common LLM mistake for "a room on Monday") → 1 night.
+    if (params.checkIn === params.checkOut) {
+      const cin = parseYmd(params.checkIn);
+      if (cin) {
+        const cout = addDays(cin.year, cin.month, cin.day, 1);
+        pushIfOpen(params.checkIn, ymd(cout.year, cout.month, cout.day));
+        return offers;
+      }
+    }
     pushIfOpen(params.checkIn, params.checkOut);
     return offers;
   }
@@ -204,10 +213,16 @@ export function searchStayAvailability(params: {
   const toDay = parseYmd(params.dateTo ?? "");
 
   // date_from + date_to without nights → exact stay (hotel "Nov 5 to Nov 7").
-  // Appointment-style windows with omitted nights used to default nights=1 and
-  // return 1-night offers that models misread as the full multi-night range.
+  // Same-day window → 1 night. Appointment-style multi-day windows with omitted
+  // nights used to default nights=1 and return 1-night offers that models
+  // misread as the full multi-night range.
   if (fromDay && toDay && params.nights == null && !params.checkIn) {
-    pushIfOpen(params.dateFrom!, params.dateTo!);
+    if (params.dateFrom === params.dateTo) {
+      const cout = addDays(fromDay.year, fromDay.month, fromDay.day, 1);
+      pushIfOpen(params.dateFrom!, ymd(cout.year, cout.month, cout.day));
+    } else {
+      pushIfOpen(params.dateFrom!, params.dateTo!);
+    }
     return offers;
   }
 

@@ -83,14 +83,17 @@ import {
   enrichContactDisplay,
   getBookingById,
   getContactById,
+  findOpenBookingByShortRef,
   getLatestOpenBooking,
   getOrCreateSession,
+  isShortBookingRef,
   listCatalogItems,
   listOccupiedIntervals,
   listStayOccupied,
   markBookingNoShow,
   resolveOrCreateContact,
   SlotConflictError,
+  type DbBooking,
   type DbCatalogItem,
 } from "@/lib/supabase/store";
 
@@ -107,6 +110,11 @@ function str(slots: Slots, ...keys: string[]): string | null {
     if (typeof v === "string" && v.trim()) return v.trim();
   }
   return null;
+}
+
+/** Guest/staff short ref — same 8-char prefix as ChatIQ schedule Id column. */
+function shortBookingRef(bookingId: string): string {
+  return bookingId.slice(0, 8);
 }
 
 function fail(
@@ -1523,6 +1531,7 @@ export async function executeBookingCommand(
         contact_id: contactId,
         booking: {
           id: booking.id,
+          booking_ref: shortBookingRef(booking.id),
           status: booking.status,
           starts_at: booking.starts_at,
           timezone: tz,
@@ -1767,6 +1776,7 @@ export async function executeBookingCommand(
           contact_id: contactId,
           booking: {
             id: booking.id,
+            booking_ref: shortBookingRef(booking.id),
             status: booking.status,
             starts_at: booking.starts_at,
             ends_at: booking.ends_at ?? null,
@@ -1848,10 +1858,24 @@ export async function executeBookingCommand(
     }
 
     // cancel / reschedule share booking resolution + confirmation gate.
-    const bookingId = str(slots, "booking_id", "id");
-    const existing = bookingId
-      ? await getBookingById({ team_id, bot_id, booking_id: bookingId })
-      : await getLatestOpenBooking({ team_id, bot_id, contact_id: contactId });
+    const bookingId = str(slots, "booking_id", "id", "booking_ref");
+    let existing: DbBooking | null = null;
+    if (bookingId && isShortBookingRef(bookingId)) {
+      existing = await findOpenBookingByShortRef({
+        team_id,
+        booking_ref: bookingId,
+        contact_id: isStaff ? null : contactId,
+        bot_id: isStaff ? null : bot_id,
+      });
+    } else if (bookingId) {
+      existing = await getBookingById({ team_id, bot_id, booking_id: bookingId });
+    } else {
+      existing = await getLatestOpenBooking({
+        team_id,
+        bot_id,
+        contact_id: contactId,
+      });
+    }
     if (!existing) {
       return fail(command, "BOOKING_NOT_FOUND", "No matching booking");
     }

@@ -395,6 +395,47 @@ export async function getBookingById(input: {
   return (data as DbBooking | null) ?? null;
 }
 
+const SHORT_BOOKING_REF_RE = /^[0-9a-f]{8}$/i;
+
+/** True for the 8-char guest/staff schedule Id prefix (not a full UUID). */
+export function isShortBookingRef(value: string): boolean {
+  return SHORT_BOOKING_REF_RE.test(value.trim());
+}
+
+/**
+ * Resolve guest-facing booking_ref (first 8 of UUID) to an open booking.
+ * Contact-scoped for customers; team-scoped when contact_id omitted (staff).
+ */
+export async function findOpenBookingByShortRef(input: {
+  team_id: string;
+  booking_ref: string;
+  contact_id?: string | null;
+  bot_id?: string | null;
+}): Promise<DbBooking | null> {
+  const ref = input.booking_ref.trim().toLowerCase();
+  if (!isShortBookingRef(ref)) return null;
+  const supabase = createBookingAdminClient();
+  if (!supabase) return null;
+  let query = supabase
+    .from("bookings")
+    .select("id, status, starts_at, ends_at, timezone, catalog_item_id, resource_id, contact_id")
+    .eq("team_id", input.team_id)
+    .in("status", ["pending", "confirmed"])
+    .gte("starts_at", new Date().toISOString())
+    .order("starts_at", { ascending: true })
+    .limit(25);
+  if (input.contact_id) query = query.eq("contact_id", input.contact_id);
+  if (input.bot_id) query = query.eq("bot_id", input.bot_id);
+  const { data, error } = await query;
+  if (error) {
+    throw new Error(`bookings short-ref lookup failed: ${error.message}`);
+  }
+  const match = (data ?? []).find(
+    (row) => typeof row.id === "string" && row.id.toLowerCase().startsWith(ref)
+  );
+  return (match as DbBooking | null) ?? null;
+}
+
 export async function updateSessionStep(
   sessionId: string,
   step: string
