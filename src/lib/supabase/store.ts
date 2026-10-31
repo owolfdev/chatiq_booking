@@ -715,9 +715,17 @@ const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHORT_REF_RE = /^[0-9a-f]{8}$/i;
 
-/** Strip chars that break PostgREST `.or()` / filter values. */
+/**
+ * Strip only chars that break PostgREST `.or()` parsing.
+ * Keep `.` and `@` so email search works (e.g. oliverwolfson@gmail.com).
+ * `%` / `_` are LIKE wildcards — neutralize `%`; leave `_` (rare in names/emails).
+ */
 function sanitizeSearchToken(raw: string): string {
-  return raw.replace(/[%_,.()"'\\]/g, " ").replace(/\s+/g, " ").trim();
+  return raw
+    .replace(/[%]/g, " ")
+    .replace(/[,()"'\\]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /**
