@@ -148,11 +148,14 @@ function serializeCustomerBooking(
     check_in: checkIn,
     check_out: checkOut,
     nights: checkIn && checkOut ? nightsBetween(checkIn, checkOut) : null,
+    guest_count:
+      typeof booking.guest_count === "number" ? booking.guest_count : null,
     service: service
       ? {
           id: service.id,
           slug: service.slug,
           title: service.title,
+          max_guests: service.max_guests ?? 2,
         }
       : null,
   };
@@ -473,6 +476,7 @@ export async function executeBookingCommand(
           buffer_before_minutes: i.buffer_before_minutes ?? 0,
           buffer_after_minutes: i.buffer_after_minutes ?? 0,
           capacity: i.capacity ?? 1,
+          max_guests: i.max_guests ?? 2,
           price_cents: i.price_cents ?? null,
           currency: i.currency ?? null,
           require_resource_kinds: i.require_resource_kinds ?? [],
@@ -1152,6 +1156,10 @@ export async function executeBookingCommand(
                 : undefined,
             capacity:
               typeof slots.capacity === "number" ? slots.capacity : undefined,
+            max_guests:
+              typeof slots.max_guests === "number"
+                ? slots.max_guests
+                : undefined,
             price_cents:
               typeof slots.price_cents === "number" ? slots.price_cents : null,
             currency: str(slots, "currency"),
@@ -1173,6 +1181,7 @@ export async function executeBookingCommand(
               slug: service.slug,
               title: service.title,
               active: service.active,
+              max_guests: service.max_guests,
             },
           });
           return ok(command, { service });
@@ -1796,6 +1805,41 @@ export async function executeBookingCommand(
           "resources shape is not enabled for this bot"
         );
       }
+      const guestCountRaw = slots.guest_count ?? slots.guests ?? slots.party_size;
+      const guestCountParsed =
+        typeof guestCountRaw === "number"
+          ? guestCountRaw
+          : typeof guestCountRaw === "string"
+            ? Number(guestCountRaw)
+            : NaN;
+      const guestCount = Number.isFinite(guestCountParsed)
+        ? Math.floor(guestCountParsed)
+        : null;
+      if (stayCreate) {
+        if (guestCount === null || guestCount < 1) {
+          return fail(
+            command,
+            "GUEST_COUNT_REQUIRED",
+            "How many guests? Pass guest_count (>= 1) for a stay booking."
+          );
+        }
+        const maxGuests = Math.max(1, svc.item.max_guests ?? 2);
+        if (guestCount > maxGuests) {
+          const roomsNeeded = Math.ceil(guestCount / maxGuests);
+          return fail(
+            command,
+            "OCCUPANCY_EXCEEDED",
+            `${svc.item.title} sleeps ${maxGuests} guest${maxGuests === 1 ? "" : "s"}. For ${guestCount} guests you need ${roomsNeeded} rooms (or a larger room type). rooms_needed=${roomsNeeded}; max_guests=${maxGuests}; guest_count=${guestCount}`
+          );
+        }
+      } else if (guestCount !== null && guestCount < 1) {
+        return fail(
+          command,
+          "INVALID_REQUEST",
+          "guest_count must be >= 1 when provided"
+        );
+      }
+
       const session = await getOrCreateSession({
         team_id,
         bot_id,
@@ -1815,6 +1859,7 @@ export async function executeBookingCommand(
           timezone: createTz,
           resource_id: resourceId,
           resource_kinds: resourceKinds,
+          guest_count: guestCount,
         });
         await audit({
           command,
@@ -1827,6 +1872,7 @@ export async function executeBookingCommand(
             catalog_item_id: booking.catalog_item_id,
             resource_id: booking.resource_id ?? null,
             resources: resourceKinds,
+            guest_count: booking.guest_count ?? guestCount,
           },
         });
         notifyCustomer("created", {
@@ -1847,6 +1893,7 @@ export async function executeBookingCommand(
             catalog_item_id: booking.catalog_item_id,
             resource_id: booking.resource_id ?? null,
             resources: resourceKinds,
+            guest_count: booking.guest_count ?? guestCount,
             shape: stayCreate || booking.ends_at ? "stays" : "appointments",
           },
         });
@@ -2093,6 +2140,7 @@ export async function executeBookingCommand(
         starts_at: new Date(newStart).toISOString(),
         timezone,
         resource_id: rescheduleResourceId,
+        guest_count: existing.guest_count ?? null,
       });
     } catch (err) {
       if (err instanceof SlotConflictError) {

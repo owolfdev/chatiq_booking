@@ -262,6 +262,23 @@ Phases 1–2 + 3a + 3b.0 + 3b console + shape modules (`resources` / `stays` / l
 
 ## 4) Progress Log
 
+### 2026-10-31 — Stay guest count (v1)
+
+**What changed:**
+- `chatiq-booking`: migration `max_guests` on `catalog_items` (default 2) + `guest_count` on `bookings`; list/upsert/create wire-up; stay create requires `guest_count` and returns `OCCUPANCY_EXCEEDED` (with rooms_needed) when over `max_guests`; admin services UI field.
+- `chatiq`: settings “Max guests per room”; concierge asks guest count on stays, passes `guest_count` on create, handles occupancy errors.
+
+**Verified:** `npm run typecheck` in both repos; migration applied to booking Supabase (`20261031000000_guest_occupancy`).
+
+**Approx. toward DoD:** stay occupancy polish (engine + concierge); Track C still ~98%.
+
+```text
+chatiq-booking: stay guest_count v1: [####################] 100% -> simple guest ask/enforce
+chatiq:         stay guest_count v1: [####################] 100% -> settings + concierge
+```
+
+**Next:** Deploy booking sibling + ChatIQ; smoke Charoen House “how many guests?”; optional raise `max_guests` on larger room types. Dual-room create still later.
+
 ### 2026-10-28 — Archive legacy ChatIQ `/dashboard/bookings` UI
 
 **What changed (`chatiq`):** Removed the global Bookings dashboard tree (clients, workflow/setup routes). Replaced with `bookings/[[...slug]]` soft landing → My Bots. Dropped sidebar Bookings item; dashboard snapshot always points at My Bots. Updated tests + roadmaps.

@@ -14,6 +14,8 @@ export type CatalogService = {
   buffer_before_minutes: number;
   buffer_after_minutes: number;
   capacity: number;
+  /** Max people per booking of this service/room (stays occupancy policy). */
+  max_guests: number;
   price_cents: number | null;
   currency: string | null;
   booking_horizon_days: number | null;
@@ -23,7 +25,7 @@ export type CatalogService = {
 };
 
 const CATALOG_SELECT =
-  "id, team_id, bot_id, slug, title, duration_minutes, active, description, category, sort_order, buffer_before_minutes, buffer_after_minutes, capacity, price_cents, currency, booking_horizon_days, min_notice_minutes, require_resource_kinds";
+  "id, team_id, bot_id, slug, title, duration_minutes, active, description, category, sort_order, buffer_before_minutes, buffer_after_minutes, capacity, max_guests, price_cents, currency, booking_horizon_days, min_notice_minutes, require_resource_kinds";
 
 export function normalizeRequireResourceKinds(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
@@ -37,8 +39,14 @@ export function normalizeRequireResourceKinds(raw: unknown): string[] {
 }
 
 function mapCatalogRow(row: Record<string, unknown>): CatalogService {
+  const maxGuestsRaw = row.max_guests;
+  const maxGuests =
+    typeof maxGuestsRaw === "number" && Number.isFinite(maxGuestsRaw)
+      ? Math.max(1, Math.floor(maxGuestsRaw))
+      : 2;
   return {
     ...(row as unknown as CatalogService),
+    max_guests: maxGuests,
     require_resource_kinds: normalizeRequireResourceKinds(
       row.require_resource_kinds
     ),
@@ -142,6 +150,8 @@ export type UpsertServiceInput = {
   buffer_before_minutes?: number;
   buffer_after_minutes?: number;
   capacity?: number;
+  /** Max people per booking of this room/service (default 2). */
+  max_guests?: number;
   price_cents?: number | null;
   currency?: string | null;
   booking_horizon_days?: number | null;
@@ -165,6 +175,10 @@ export async function upsertCatalogService(
   if (!Number.isFinite(capacity) || capacity < 1) {
     throw new Error("capacity must be >= 1");
   }
+  const maxGuests = input.max_guests ?? 2;
+  if (!Number.isFinite(maxGuests) || maxGuests < 1) {
+    throw new Error("max_guests must be >= 1");
+  }
 
   const slug =
     (input.slug?.trim() ? slugify(input.slug) : null) ||
@@ -183,6 +197,7 @@ export async function upsertCatalogService(
     buffer_before_minutes: Math.max(0, Math.floor(input.buffer_before_minutes ?? 0)),
     buffer_after_minutes: Math.max(0, Math.floor(input.buffer_after_minutes ?? 0)),
     capacity: Math.floor(capacity),
+    max_guests: Math.floor(maxGuests),
     price_cents:
       typeof input.price_cents === "number" ? Math.floor(input.price_cents) : null,
     currency: input.currency?.trim().toUpperCase() || null,

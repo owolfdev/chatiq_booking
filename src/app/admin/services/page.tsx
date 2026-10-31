@@ -18,6 +18,7 @@ type ServiceRow = {
   buffer_before_minutes: number;
   buffer_after_minutes: number;
   capacity: number;
+  max_guests?: number;
   price_cents: number | null;
   currency: string | null;
 };
@@ -32,6 +33,7 @@ type FormState = {
   buffer_before_minutes: string;
   buffer_after_minutes: string;
   capacity: string;
+  max_guests: string;
   price_cents: string;
   currency: string;
   active: boolean;
@@ -47,6 +49,7 @@ const emptyForm = (): FormState => ({
   buffer_before_minutes: "0",
   buffer_after_minutes: "0",
   capacity: "1",
+  max_guests: "2",
   price_cents: "",
   currency: "THB",
   active: true,
@@ -63,6 +66,7 @@ function formFromService(s: ServiceRow): FormState {
     buffer_before_minutes: String(s.buffer_before_minutes ?? 0),
     buffer_after_minutes: String(s.buffer_after_minutes ?? 0),
     capacity: String(s.capacity ?? 1),
+    max_guests: String(s.max_guests ?? 2),
     price_cents:
       typeof s.price_cents === "number" ? String(s.price_cents) : "",
     currency: s.currency ?? "THB",
@@ -138,6 +142,7 @@ function ServicesPanel({
         buffer_before_minutes: Number(form.buffer_before_minutes) || 0,
         buffer_after_minutes: Number(form.buffer_after_minutes) || 0,
         capacity: Math.max(1, Number(form.capacity) || 1),
+        max_guests: Math.max(1, Number(form.max_guests) || 2),
         price_cents: form.price_cents.trim()
           ? Number(form.price_cents)
           : null,
@@ -283,12 +288,22 @@ function ServicesPanel({
             />
           </div>
           <div style={adminUi.field}>
-            <label style={adminUi.label}>Capacity</label>
+            <label style={adminUi.label}>Inventory (rooms of type)</label>
             <input
               style={{ ...adminUi.input, width: "100%", fontFamily: "inherit" }}
               value={form.capacity}
               onChange={(e) =>
                 setForm((f) => ({ ...f, capacity: e.target.value }))
+              }
+            />
+          </div>
+          <div style={adminUi.field}>
+            <label style={adminUi.label}>Max guests / room</label>
+            <input
+              style={{ ...adminUi.input, width: "100%", fontFamily: "inherit" }}
+              value={form.max_guests}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, max_guests: e.target.value }))
               }
             />
           </div>

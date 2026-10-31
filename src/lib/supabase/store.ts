@@ -314,6 +314,7 @@ export type DbCatalogItem = {
   buffer_before_minutes?: number;
   buffer_after_minutes?: number;
   capacity?: number;
+  max_guests?: number;
   price_cents?: number | null;
   currency?: string | null;
   booking_horizon_days?: number | null;
@@ -340,6 +341,7 @@ export async function listCatalogItems(input: {
     buffer_before_minutes: r.buffer_before_minutes,
     buffer_after_minutes: r.buffer_after_minutes,
     capacity: r.capacity,
+    max_guests: r.max_guests,
     price_cents: r.price_cents,
     currency: r.currency,
     booking_horizon_days: r.booking_horizon_days,
@@ -384,7 +386,9 @@ export async function getBookingById(input: {
   if (!supabase) return null;
   const { data, error } = await supabase
     .from("bookings")
-    .select("id, status, starts_at, ends_at, timezone, catalog_item_id, resource_id, contact_id")
+    .select(
+      "id, status, starts_at, ends_at, timezone, catalog_item_id, resource_id, contact_id, guest_count"
+    )
     .eq("team_id", input.team_id)
     .eq("bot_id", input.bot_id)
     .eq("id", input.booking_id)
@@ -418,7 +422,9 @@ export async function findOpenBookingByShortRef(input: {
   if (!supabase) return null;
   let query = supabase
     .from("bookings")
-    .select("id, status, starts_at, ends_at, timezone, catalog_item_id, resource_id, contact_id")
+    .select(
+      "id, status, starts_at, ends_at, timezone, catalog_item_id, resource_id, contact_id, guest_count"
+    )
     .eq("team_id", input.team_id)
     .in("status", ["pending", "confirmed"])
     .gte("starts_at", new Date().toISOString())
@@ -591,6 +597,7 @@ export type DbBooking = {
   catalog_item_id: string | null;
   resource_id?: string | null;
   contact_id?: string;
+  guest_count?: number | null;
 };
 
 /**
@@ -613,7 +620,9 @@ export async function listOpenBookings(input: {
   void input.bot_id;
   const { data, error } = await supabase
     .from("bookings")
-    .select("id, status, starts_at, ends_at, timezone, catalog_item_id, resource_id, contact_id")
+    .select(
+      "id, status, starts_at, ends_at, timezone, catalog_item_id, resource_id, contact_id, guest_count"
+    )
     .eq("team_id", input.team_id)
     .eq("contact_id", input.contact_id)
     .in("status", ["pending", "confirmed"])
@@ -889,6 +898,8 @@ export async function createBooking(input: {
   resource_kinds?: Array<{ id: string; kind: string }> | null;
   /** Stay check-out (exclusive). When set, night-range capacity applies. */
   ends_at?: string | null;
+  /** Party size for this booking (stays occupancy). */
+  guest_count?: number | null;
 }): Promise<DbBooking> {
   const supabase = createBookingAdminClient();
   if (!supabase) throw new Error("Supabase not configured");
@@ -912,6 +923,10 @@ export async function createBooking(input: {
   let duration = 30;
   let bufferBefore = 0;
   let bufferAfter = 0;
+  const guestCount =
+    typeof input.guest_count === "number" && Number.isFinite(input.guest_count)
+      ? Math.max(1, Math.floor(input.guest_count))
+      : null;
   if (input.catalog_item_id) {
     const { data: item } = await supabase
       .from("catalog_items")
@@ -1005,9 +1020,10 @@ export async function createBooking(input: {
       starts_at: startsAt,
       ends_at: endsAt,
       timezone: input.timezone,
+      guest_count: guestCount,
     })
     .select(
-      "id, status, starts_at, ends_at, timezone, catalog_item_id, resource_id"
+      "id, status, starts_at, ends_at, timezone, catalog_item_id, resource_id, guest_count"
     )
     .single();
 
