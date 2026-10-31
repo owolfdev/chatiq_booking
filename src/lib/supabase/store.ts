@@ -683,34 +683,117 @@ export type AdminBookingRow = {
   contact_id: string;
   status: string;
   starts_at: string | null;
+  ends_at?: string | null;
   timezone: string;
   created_at: string;
   catalog_item_id: string | null;
+  resource_id?: string | null;
+  guest_count?: number | null;
   contact_name: string | null;
   contact_email: string | null;
+  contact_phone?: string | null;
   service_title: string | null;
   service_slug: string | null;
   service_duration_minutes: number | null;
+  service_max_guests?: number | null;
 };
 
-export async function listRecentBookings(input?: {
+export type AdminBookingsOrder =
+  | "starts_at_asc"
+  | "starts_at_desc"
+  | "created_at_asc"
+  | "created_at_desc";
+
+export type ListAdminBookingsResult = {
+  bookings: AdminBookingRow[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SHORT_REF_RE = /^[0-9a-f]{8}$/i;
+
+/** Strip chars that break PostgREST `.or()` / filter values. */
+function sanitizeSearchToken(raw: string): string {
+  return raw.replace(/[%_,.()"'\\]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Staff schedule list with optional search + offset pagination.
+ * `q` matches contact name/email/phone (ilike) and booking id / 8-char ref.
+ */
+export async function listAdminBookings(input?: {
   team_id?: string;
   bot_id?: string;
   limit?: number;
+  offset?: number;
   status?: string | string[];
   from?: string;
   to?: string;
-}): Promise<AdminBookingRow[]> {
+  q?: string;
+  order?: AdminBookingsOrder;
+}): Promise<ListAdminBookingsResult> {
   const supabase = createBookingAdminClient();
-  if (!supabase) return [];
+  const limit = Math.min(100, Math.max(1, Math.floor(input?.limit ?? 25)));
+  const offset = Math.max(0, Math.floor(input?.offset ?? 0));
+  if (!supabase) {
+    return { bookings: [], total: 0, limit, offset };
+  }
+
+  const order: AdminBookingsOrder = input?.order ?? "starts_at_asc";
+  const orderCol = order.startsWith("created_at") ? "created_at" : "starts_at";
+  const ascending = order.endsWith("_asc");
+
+  const qRaw = input?.q?.trim() ?? "";
+  const q = sanitizeSearchToken(qRaw);
+  let matchedContactIds: string[] | null = null;
+  let idExact: string | null = null;
+  let idPrefix: string | null = null;
+
+  if (qRaw) {
+    if (UUID_RE.test(qRaw)) {
+      idExact = qRaw.toLowerCase();
+    } else if (SHORT_REF_RE.test(qRaw)) {
+      idPrefix = qRaw.toLowerCase();
+    }
+
+    if (!idExact && q) {
+      let contactQuery = supabase.from("contacts").select("id").limit(200);
+      if (input?.team_id) {
+        contactQuery = contactQuery.eq("team_id", input.team_id);
+      }
+      const pattern = `"%${q}%"`;
+      contactQuery = contactQuery.or(
+        `name.ilike.${pattern},email.ilike.${pattern},phone.ilike.${pattern}`
+      );
+      const { data: contacts, error: contactErr } = await contactQuery;
+      if (contactErr) {
+        throw new Error(`contacts search failed: ${contactErr.message}`);
+      }
+      matchedContactIds = (contacts ?? []).map((c) => c.id as string);
+    }
+  }
+
+  // Free-text search with no contact hits and no id token → empty page.
+  if (
+    qRaw &&
+    !idExact &&
+    !idPrefix &&
+    (!matchedContactIds || matchedContactIds.length === 0)
+  ) {
+    return { bookings: [], total: 0, limit, offset };
+  }
 
   let query = supabase
     .from("bookings")
     .select(
-      "id, team_id, bot_id, contact_id, status, starts_at, timezone, created_at, catalog_item_id"
+      "id, team_id, bot_id, contact_id, status, starts_at, ends_at, timezone, created_at, catalog_item_id, resource_id, guest_count",
+      { count: "exact" }
     )
-    .order("starts_at", { ascending: true, nullsFirst: false })
-    .limit(input?.limit ?? 100);
+    .order(orderCol, { ascending, nullsFirst: false })
+    .range(offset, offset + limit - 1);
 
   if (input?.team_id) query = query.eq("team_id", input.team_id);
   if (input?.bot_id) query = query.eq("bot_id", input.bot_id);
@@ -721,12 +804,32 @@ export async function listRecentBookings(input?: {
   if (input?.from) query = query.gte("starts_at", input.from);
   if (input?.to) query = query.lte("starts_at", input.to);
 
-  const { data, error } = await query;
+  if (idExact) {
+    query = query.eq("id", idExact);
+  } else if (idPrefix || (matchedContactIds && matchedContactIds.length > 0)) {
+    // UUID columns don't support `like` in Postgres; match the 8-char guest ref
+    // via the first UUID segment range (xxxxxxxx-0000-… … xxxxxxxx-ffff-…).
+    const parts: string[] = [];
+    if (idPrefix) {
+      const lo = `${idPrefix}-0000-0000-0000-000000000000`;
+      const hi = `${idPrefix}-ffff-ffff-ffff-ffffffffffff`;
+      parts.push(`and(id.gte.${lo},id.lte.${hi})`);
+    }
+    if (matchedContactIds && matchedContactIds.length > 0) {
+      parts.push(`contact_id.in.(${matchedContactIds.join(",")})`);
+    }
+    query = query.or(parts.join(","));
+  }
+
+  const { data, error, count } = await query;
   if (error) {
     throw new Error(`bookings list failed: ${error.message}`);
   }
   const rows = data ?? [];
-  if (rows.length === 0) return [];
+  const total = typeof count === "number" ? count : rows.length;
+  if (rows.length === 0) {
+    return { bookings: [], total, limit, offset };
+  }
 
   const contactIds = [...new Set(rows.map((r) => r.contact_id).filter(Boolean))];
   const catalogIds = [
@@ -739,50 +842,87 @@ export async function listRecentBookings(input?: {
 
   const contactMap = new Map<
     string,
-    { name: string | null; email: string | null }
+    { name: string | null; email: string | null; phone: string | null }
   >();
   if (contactIds.length > 0) {
     const { data: contacts } = await supabase
       .from("contacts")
-      .select("id, name, email")
+      .select("id, name, email, phone")
       .in("id", contactIds);
     for (const c of contacts ?? []) {
-      contactMap.set(c.id, { name: c.name ?? null, email: c.email ?? null });
+      contactMap.set(c.id, {
+        name: c.name ?? null,
+        email: c.email ?? null,
+        phone: c.phone ?? null,
+      });
     }
   }
 
   const catalogMap = new Map<
     string,
-    { title: string; slug: string; duration_minutes: number }
+    {
+      title: string;
+      slug: string;
+      duration_minutes: number;
+      max_guests: number;
+    }
   >();
   if (catalogIds.length > 0) {
     const { data: items } = await supabase
       .from("catalog_items")
-      .select("id, title, slug, duration_minutes")
+      .select("id, title, slug, duration_minutes, max_guests")
       .in("id", catalogIds);
     for (const item of items ?? []) {
       catalogMap.set(item.id, {
         title: item.title,
         slug: item.slug,
         duration_minutes: item.duration_minutes,
+        max_guests:
+          typeof item.max_guests === "number" && Number.isFinite(item.max_guests)
+            ? Math.max(1, Math.floor(item.max_guests))
+            : 2,
       });
     }
   }
 
-  return rows.map((r) => {
+  const bookings = rows.map((r) => {
     const contact = contactMap.get(r.contact_id);
     const service = r.catalog_item_id
       ? catalogMap.get(r.catalog_item_id)
       : undefined;
     return {
       ...r,
+      ends_at: r.ends_at ?? null,
+      resource_id: r.resource_id ?? null,
+      guest_count:
+        typeof r.guest_count === "number" ? r.guest_count : null,
       contact_name: contact?.name ?? null,
       contact_email: contact?.email ?? null,
+      contact_phone: contact?.phone ?? null,
       service_title: service?.title ?? null,
       service_slug: service?.slug ?? null,
       service_duration_minutes: service?.duration_minutes ?? null,
+      service_max_guests: service?.max_guests ?? null,
     };
   });
+
+  return { bookings, total, limit, offset };
+}
+
+/** @deprecated Prefer listAdminBookings for pagination metadata. */
+export async function listRecentBookings(input?: {
+  team_id?: string;
+  bot_id?: string;
+  limit?: number;
+  offset?: number;
+  status?: string | string[];
+  from?: string;
+  to?: string;
+  q?: string;
+  order?: AdminBookingsOrder;
+}): Promise<AdminBookingRow[]> {
+  const result = await listAdminBookings(input);
+  return result.bookings;
 }
 
 export class SlotConflictError extends Error {

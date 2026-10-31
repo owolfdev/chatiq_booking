@@ -42,7 +42,7 @@ Global sidebar **Bookings** is removed; `/dashboard/bookings/**` soft-lands to M
 
 | Surface | Status | Purpose |
 |---------|--------|---------|
-| **Schedule** | ✅ | See customer bookings; filter by status/time, sort, cancel / reschedule / no-show / create-on-behalf / hard-delete (`booking.admin_delete`; prefer cancel for normal ops). Progress banner stays visible through refresh; Status, When, Sort, and create-form Service are saved per user/bot in browser storage. Row selection resets on revisit. |
+| **Schedule** | ✅ | See customer bookings; **search** (name/email/phone/ref), **offset pagination**, filter by status/time, server sort; select row for details (stay dates, guests, contact, copyable ref) + cancel / reschedule / no-show / create-on-behalf / hard-delete. Progress banner stays visible through refresh; Status, When, Sort, and create-form Service are saved per user/bot in browser storage. Row selection resets on revisit. |
 | **Booking settings** | ✅ | Shapes, services, hours (+ closed dates), resources + eligibility + person+room |
 | **booking_mode** (bot Settings form) | Separate | Chat gate only — not the operator catalog UI |
 | **Customers / audit** | Later | Linked identities; who changed what (still sibling `/admin` for now) |

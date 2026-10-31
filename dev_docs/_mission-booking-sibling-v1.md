@@ -262,6 +262,22 @@ Phases 1–2 + 3a + 3b.0 + 3b console + shape modules (`resources` / `stays` / l
 
 ## 4) Progress Log
 
+### 2026-11-01 — Schedule search, pagination, details
+
+**What changed:**
+- `chatiq-booking`: `listAdminBookings` with `q` (contact name/email/phone + booking id/ref), `offset`/`limit`, `order`, `total`/`has_more`; list rows include `ends_at`, `guest_count`, contact phone, service max guests.
+- `chatiq`: schedule search box, prev/next pagination (25/page), server-side When/Sort; richer selected **Booking details** panel (stay dates, guests, contact, copyable ref).
+
+**Verified:** typecheck both repos (this session).
+
+**Approx. toward DoD:** Track C schedule ops polish; still ~98% product DoD.
+
+```text
+chatiq-booking + chatiq: schedule search/pagination/details: [####################] 100% -> find + inspect
+```
+
+**Next:** Deploy both; smoke search by name/ref and stay detail panel on Charoen House.
+
 ### 2026-10-31 — Stay guest count (v1)
 
 **What changed:**
