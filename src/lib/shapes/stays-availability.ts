@@ -257,3 +257,77 @@ export function searchStayAvailability(params: {
 
   return offers;
 }
+
+/** Why an exact stay request returned no offers (for honest guest copy). */
+export function diagnoseStayRejection(params: {
+  timeZone: string;
+  now?: Date;
+  checkIn: string;
+  checkOut: string;
+  capacity?: number;
+  occupied?: StayOccupied[];
+  minNoticeMinutes?: number;
+  bookingHorizonDays?: number;
+}): {
+  code: "INVALID_RANGE" | "TOO_SOON" | "BEYOND_HORIZON" | "NO_CAPACITY" | null;
+  booking_horizon_days: number;
+  min_notice_minutes: number;
+} {
+  const timeZone = params.timeZone || "Asia/Bangkok";
+  const now = params.now ?? new Date();
+  const capacity = Math.max(1, params.capacity ?? 1);
+  const occupied = params.occupied ?? [];
+  const minNotice = Math.max(0, params.minNoticeMinutes ?? 0);
+  const horizonDays = Math.max(1, params.bookingHorizonDays ?? 90);
+  const nights = nightsBetween(params.checkIn, params.checkOut);
+  if (nights < 1) {
+    return {
+      code: "INVALID_RANGE",
+      booking_horizon_days: horizonDays,
+      min_notice_minutes: minNotice,
+    };
+  }
+  const start = stayDateToUtc(params.checkIn, timeZone);
+  const end = stayDateToUtc(params.checkOut, timeZone);
+  if (!start || !end) {
+    return {
+      code: "INVALID_RANGE",
+      booking_horizon_days: horizonDays,
+      min_notice_minutes: minNotice,
+    };
+  }
+  const earliest = now.getTime() + minNotice * 60_000;
+  const horizonEnd = now.getTime() + horizonDays * 86_400_000;
+  if (start.getTime() < earliest) {
+    return {
+      code: "TOO_SOON",
+      booking_horizon_days: horizonDays,
+      min_notice_minutes: minNotice,
+    };
+  }
+  if (start.getTime() > horizonEnd) {
+    return {
+      code: "BEYOND_HORIZON",
+      booking_horizon_days: horizonDays,
+      min_notice_minutes: minNotice,
+    };
+  }
+  const remaining = remainingStayCapacity({
+    checkInIso: start.toISOString(),
+    checkOutIso: end.toISOString(),
+    capacity,
+    occupied,
+  });
+  if (remaining <= 0) {
+    return {
+      code: "NO_CAPACITY",
+      booking_horizon_days: horizonDays,
+      min_notice_minutes: minNotice,
+    };
+  }
+  return {
+    code: null,
+    booking_horizon_days: horizonDays,
+    min_notice_minutes: minNotice,
+  };
+}

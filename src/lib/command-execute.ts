@@ -27,6 +27,7 @@ import {
   searchAvailabilityForResources,
 } from "@/lib/shapes/resources-availability";
 import {
+  diagnoseStayRejection,
   nightsBetween,
   searchStayAvailability,
   stayDateToUtc,
@@ -435,6 +436,8 @@ export async function executeBookingCommand(
         resources_enabled: shapes.includes("resources"),
         stays_enabled: shapes.includes("stays"),
         timezone: settings.timezone || timezone,
+        booking_horizon_days: settings.booking_horizon_days,
+        min_notice_minutes: settings.min_notice_minutes,
       });
     }
 
@@ -542,6 +545,10 @@ export async function executeBookingCommand(
           bot_id,
           catalog_item_id: svc.item.id,
         });
+        const horizonDays =
+          svc.item.booking_horizon_days ?? settings.booking_horizon_days;
+        const minNotice =
+          svc.item.min_notice_minutes ?? settings.min_notice_minutes;
         const found = searchStayAvailability({
           timeZone: tz,
           checkIn: checkIn ?? undefined,
@@ -551,12 +558,43 @@ export async function executeBookingCommand(
           dateTo,
           capacity: svc.item.capacity ?? 1,
           occupied,
-          minNoticeMinutes:
-            svc.item.min_notice_minutes ?? settings.min_notice_minutes,
-          bookingHorizonDays:
-            svc.item.booking_horizon_days ?? settings.booking_horizon_days,
+          minNoticeMinutes: minNotice,
+          bookingHorizonDays: horizonDays,
           count,
         });
+        let unavailability: Record<string, unknown> | null = null;
+        if (found.length === 0 && checkIn) {
+          const cout =
+            checkOut ??
+            (typeof nights === "number" && nights >= 1
+              ? (() => {
+                  const p = checkIn.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                  if (!p) return null;
+                  const d = new Date(
+                    Date.UTC(Number(p[1]), Number(p[2]) - 1, Number(p[3]) + nights)
+                  );
+                  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+                })()
+              : null);
+          if (cout) {
+            const diag = diagnoseStayRejection({
+              timeZone: tz,
+              checkIn,
+              checkOut: cout,
+              capacity: svc.item.capacity ?? 1,
+              occupied,
+              minNoticeMinutes: minNotice,
+              bookingHorizonDays: horizonDays,
+            });
+            if (diag.code) {
+              unavailability = {
+                code: diag.code,
+                booking_horizon_days: diag.booking_horizon_days,
+                min_notice_minutes: diag.min_notice_minutes,
+              };
+            }
+          }
+        }
         return ok(command, {
           shape: "stays",
           service: {
@@ -576,6 +614,8 @@ export async function executeBookingCommand(
             timezone: tz,
           })),
           timezone: tz,
+          booking_horizon_days: horizonDays,
+          ...(unavailability ? { unavailability } : {}),
         });
       }
 
