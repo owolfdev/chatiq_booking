@@ -1,14 +1,14 @@
 # Mission: Booking sibling v1 (`chatiq-booking`)
 
-Last updated: 2026-10-28
+Last updated: 2026-11-02
 
-Status: **Engine ✅** · **Track C operator UI ~98% shipped; production pilot ✅ (operator confirmed 2026-10-28)**. ChatIQ schedule/settings and Booking links live; legacy Bookings is hidden; sibling `/admin` is ops-only. Optional next: archive legacy dashboard code; time blocks / customers in ChatIQ; or Watch / core chat. **Roadmap (git):** [`../ROADMAP.md`](../ROADMAP.md). Workspace index: [`../../ROADMAP.md`](../../ROADMAP.md). Spec: [`chatiq-booking-operator-ui.md`](./chatiq-booking-operator-ui.md). Design: [`booking-command-library.md`](./booking-command-library.md) · Identity: [`identity-and-account-linking.md`](./identity-and-account-linking.md) · Catalog: [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) · Modules: [`base-and-shape-modules.md`](./base-and-shape-modules.md).
+Status: **Engine ✅** · **Track C operator UI ~98% shipped; production pilot ✅ (operator confirmed 2026-10-28)**. Stay guest_count + schedule search/pagination/details + **guest confirmation email v1** (ChatIQ Resend) shipped. Sibling `/admin` is ops-only. Optional next: time blocks / customers in ChatIQ; dual-room create; Watch / core chat. **Roadmap (git):** [`../ROADMAP.md`](../ROADMAP.md). Workspace index: [`../../ROADMAP.md`](../../ROADMAP.md). Spec: [`chatiq-booking-operator-ui.md`](./chatiq-booking-operator-ui.md) · Guest notify: [`guest-notifications.md`](./guest-notifications.md). Design: [`booking-command-library.md`](./booking-command-library.md) · Identity: [`identity-and-account-linking.md`](./identity-and-account-linking.md) · Catalog: [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) · Modules: [`base-and-shape-modules.md`](./base-and-shape-modules.md).
 
 Owner: Engineering
 
 ## Resume here (next session)
 
-**Next action (2026-10-28): other lanes.** Track C operator UI is production-confirmed; legacy global Bookings UI archived. Prefer **Watch Phase B** or core chat from [`../ROADMAP.md`](../ROADMAP.md) / workspace [`../../ROADMAP.md`](../../ROADMAP.md).
+**Next action (2026-11-02):** Smoke confirmation email on signed-in Charoen House (create → inbox), then prefer **Watch Phase B** or core chat from [`../ROADMAP.md`](../ROADMAP.md) / workspace [`../../ROADMAP.md`](../../ROADMAP.md). Optional booking: dual-room when occupancy exceeded; anonymous→login claim.
 
 **How to open it:** My Bots → **Booking** on a `booking_mode=full` bot; links also appear in bot Settings, bot preview, and `/chat/[slug]` when sibling runtime is configured. The booking mode dropdown controls chat routing.
 
@@ -38,7 +38,7 @@ Needs `BOOKING_RUNTIME=sibling` + URL + token on that ChatIQ deploy.
 11b. ~~**Archive legacy `/dashboard/bookings` UI**~~ ✅ **DONE 2026-10-28** — old routes removed; catch-all soft landing; Bookings nav gone.  
 12. ~~**Demote sibling `/admin`**~~ ✅ **DONE 2026-10-26** — docs frame `/admin` as ops/pilot only; ChatIQ is the product surface.
 
-**After Track C:** optional time blocks in ChatIQ, payments, large-catalog prompts; or Watch / core chat from [`../ROADMAP.md`](../ROADMAP.md).
+**After Track C:** ~~guest confirmation email~~ ✅ **v1 DONE 2026-11-02** (ChatIQ Resend; see [`guest-notifications.md`](./guest-notifications.md)). Optional: time blocks in ChatIQ, payments, large-catalog prompts; or Watch / core chat from [`../ROADMAP.md`](../ROADMAP.md).
 
 ### Track A — Base + appointments (complete)
 
@@ -261,6 +261,20 @@ Phases 1–2 + 3a + 3b.0 + 3b console + shape modules (`resources` / `stays` / l
 - [x] Customer notification on admin changes via ChatIQ (2026-10-25)
 
 ## 4) Progress Log
+
+### 2026-11-02 — Booking confirmation emails (v1)
+
+**What changed (`chatiq`):** Resend emails for booking created / cancelled / rescheduled when an email is available (signed-in user email preferred; contact email fallback). Wired from concierge after successful mutations and from staff admin-change notify (LINE/web + email). Best-effort; never blocks the booking.
+
+**Verified:** typecheck (this session).
+
+**Approx. toward DoD:** booking guest communications polish; Track C still ~98%.
+
+```text
+chatiq: booking confirmation email v1: [####################] 100% -> create/cancel/reschedule
+```
+
+**Next:** Deploy ChatIQ; smoke signed-in Charoen House book → inbox; confirm LINE-only still skips email.
 
 ### 2026-11-01 — Schedule search, pagination, details
 

@@ -1,7 +1,7 @@
 # ChatIQ booking operator UI (product surface)
 
-Last updated: 2026-10-28  
-Status: **~99% shipped; production ✅.** Schedule ✅ · Settings ✅ · Booking links ✅ · Legacy UI archived ✅ · Sibling `/admin` ops-only ✅. Optional: time blocks / customers-audit in ChatIQ.
+Last updated: 2026-11-02  
+Status: **~99% shipped; production ✅.** Schedule ✅ (search/pagination/details) · Settings ✅ · Booking links ✅ · Legacy UI archived ✅ · Sibling `/admin` ops-only ✅ · Guest email confirmations ✅ (ChatIQ). Optional: time blocks / customers-audit in ChatIQ.
 
 Mission: [`_mission-booking-sibling-v1.md`](./_mission-booking-sibling-v1.md) · Roadmap: [`../ROADMAP.md`](../ROADMAP.md) · Workspace index: [`../../ROADMAP.md`](../../ROADMAP.md)
 
@@ -46,6 +46,7 @@ Global sidebar **Bookings** is removed; `/dashboard/bookings/**` soft-lands to M
 | **Booking settings** | ✅ | Shapes, services, hours (+ closed dates), resources + eligibility + person+room |
 | **booking_mode** (bot Settings form) | Separate | Chat gate only — not the operator catalog UI |
 | **Customers / audit** | Later | Linked identities; who changed what (still sibling `/admin` for now) |
+| **Guest notifications** | ✅ v1 | In-chat always; staff changes → LINE + web; **email** on create/cancel/reschedule when address known — [`guest-notifications.md`](./guest-notifications.md) |
 
 ## 5) Architecture rules
 
@@ -53,7 +54,8 @@ Global sidebar **Bookings** is removed; `/dashboard/bookings/**` soft-lands to M
 2. Auth: ChatIQ session + team membership; server-side service token (never in the browser).  
 3. Scope every call with the selected `team_id` + `bot_id`.  
 4. No booking tables in ChatIQ Postgres for operator data — sibling DB is source of truth.  
-5. Concierge / customer chat path unchanged (thin adapter).
+5. Concierge / customer chat path unchanged (thin adapter).  
+6. Guest emails are sent by **ChatIQ** (Resend), not the booking engine — best-effort after mutations succeed.
 
 Staff helpers: `chatiq/src/lib/booking-sibling/staff.ts` · `POST /api/booking/staff/command` · `GET /api/booking/staff/bookings`.
 

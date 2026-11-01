@@ -1,6 +1,6 @@
 # What’s next — `chatiq-booking`
 
-Last updated: 2026-10-28
+Last updated: 2026-11-02
 
 **Start here for this repo.** Mission handoff (Resume / Progress Log): [`dev_docs/_mission-booking-sibling-v1.md`](./dev_docs/_mission-booking-sibling-v1.md). Operator UI spec: [`dev_docs/chatiq-booking-operator-ui.md`](./dev_docs/chatiq-booking-operator-ui.md).
 
@@ -48,9 +48,17 @@ Product surface for subscribers lives in **ChatIQ** (team auth). This repo stays
 
 **Logged HEADs (2026-10-28):** this repo `3bad3a9` (includes delete fix `7b68459`); `chatiq` `4432967a` (includes `f40ede42` / `62ea7790`).
 
+## Guest communications (ChatIQ)
+
+| Status | Item |
+|--------|------|
+| ✅ | Stay `guest_count` + `max_guests` (2026-10-31) |
+| ✅ | Schedule search / pagination / details (2026-11-01) |
+| ✅ | Confirmation **email** v1 on create/cancel/reschedule when email known (2026-11-02) — [`dev_docs/guest-notifications.md`](./dev_docs/guest-notifications.md) |
+
 ## Next (this engine)
 
-Optional: payments, large-catalog prompts, time-blocks / customers-audit APIs if ChatIQ needs them. Default product next after Track C is often **Watch Phase B** or **core chat** — see workspace index / those repos’ `ROADMAP.md`.
+Optional: dual-room create on occupancy exceeded; anonymous→login claim; payments; large-catalog prompts; time-blocks / customers-audit APIs if ChatIQ needs them. Default product next is often **Watch Phase B** or **core chat** — see workspace index / those repos’ `ROADMAP.md`.
 
 ## Design refs
 
@@ -58,3 +66,5 @@ Optional: payments, large-catalog prompts, time-blocks / customers-audit APIs if
 - [`dev_docs/identity-and-account-linking.md`](./dev_docs/identity-and-account-linking.md)
 - [`dev_docs/service-catalog-and-availability.md`](./dev_docs/service-catalog-and-availability.md)
 - [`dev_docs/base-and-shape-modules.md`](./dev_docs/base-and-shape-modules.md)
+- [`dev_docs/guest-notifications.md`](./dev_docs/guest-notifications.md)
+- [`dev_docs/chatiq-booking-operator-ui.md`](./dev_docs/chatiq-booking-operator-ui.md)

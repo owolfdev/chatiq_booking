@@ -3,7 +3,7 @@
 **What’s next (git):** [`../ROADMAP.md`](../ROADMAP.md)  
 **Mission handoff:** [`_mission-booking-sibling-v1.md`](./_mission-booking-sibling-v1.md) → Resume here / Progress Log
 
-**2026-10-28:** Track C ~98% shipped; production ✅ (operator confirmed). Optional next: ChatIQ legacy Bookings archive, Watch Phase B, or core chat.
+**2026-11-02:** Track C ~98% shipped; production ✅. Guest confirmation email v1 (ChatIQ). Optional next: Watch Phase B or core chat.
 
 | Doc | Role |
 |-----|------|
@@ -14,6 +14,7 @@
 | [`service-catalog-and-availability.md`](./service-catalog-and-availability.md) | **Phase 3b.0 spec** |
 | [`base-and-shape-modules.md`](./base-and-shape-modules.md) | **Architecture: base + shapes** |
 | [`chatiq-booking-operator-ui.md`](./chatiq-booking-operator-ui.md) | **Track C operator UI product surface** |
+| [`guest-notifications.md`](./guest-notifications.md) | **Guest chat / LINE / email notify map** |
 | [`api-contract-v0.md`](./api-contract-v0.md) | HTTP contract |
 | [`supabase-setup.md`](./supabase-setup.md) | Supabase provisioning/migrations |
 
